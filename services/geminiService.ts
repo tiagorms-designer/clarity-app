@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { Highlight, RiskLevel } from "../types";
 
 const GEMINI_MODEL = "gemini-3-flash-preview";
@@ -36,60 +36,80 @@ export const analyzeDocumentWithGemini = async (
   `;
 
   try {
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          sender: {
-            type: Type.STRING,
-            description: "O departamento interno, empresa externa ou área responsável pelo documento (ex: Jurídico, RH, Financeiro)."
-          },
-          summary: {
-            type: Type.STRING,
-            description: "Resumo executivo profissional (1 parágrafo) focado na tomada de decisão."
-          },
-          overallRisk: {
-            type: Type.STRING,
-            enum: ["HIGH", "MEDIUM", "LOW", "NEUTRAL"],
-            description: "Nível de risco agregado do documento."
-          },
-          highlights: {
-            type: Type.ARRAY,
-            description: "Lista de pontos de risco identificados no texto.",
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                textSnippet: {
-                  type: Type.STRING,
-                  description: "CÓPIA EXATA e LITERAL do trecho do texto original que contém o risco."
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: prompt,
+      config: {
+        // Configurações de segurança para evitar bloqueio de termos jurídicos/contratuais
+        safetySettings: [
+            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            sender: {
+              type: Type.STRING,
+              description: "O departamento interno, empresa externa ou área responsável pelo documento (ex: Jurídico, RH, Financeiro)."
+            },
+            summary: {
+              type: Type.STRING,
+              description: "Resumo executivo profissional (1 parágrafo) focado na tomada de decisão."
+            },
+            overallRisk: {
+              type: Type.STRING,
+              enum: ["HIGH", "MEDIUM", "LOW", "NEUTRAL"],
+              description: "Nível de risco agregado do documento."
+            },
+            highlights: {
+              type: Type.ARRAY,
+              description: "Lista de pontos de risco identificados no texto.",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  textSnippet: {
+                    type: Type.STRING,
+                    description: "CÓPIA EXATA e LITERAL do trecho do texto original que contém o risco."
+                  },
+                  explanation: {
+                    type: Type.STRING,
+                    description: "Explicação do impacto (máx 20 palavras)."
+                  },
+                  riskLevel: {
+                    type: Type.STRING,
+                    enum: ["HIGH", "MEDIUM", "LOW", "NEUTRAL"]
+                  },
+                  category: {
+                    type: Type.STRING,
+                    description: "Categoria (ex: Jurídico, Financeiro, Compliance, SLA, Segurança)."
+                  }
                 },
-                explanation: {
-                  type: Type.STRING,
-                  description: "Explicação do impacto (máx 20 palavras)."
-                },
-                riskLevel: {
-                  type: Type.STRING,
-                  enum: ["HIGH", "MEDIUM", "LOW", "NEUTRAL"]
-                },
-                category: {
-                  type: Type.STRING,
-                  description: "Categoria (ex: Jurídico, Financeiro, Compliance, SLA, Segurança)."
-                }
-              },
-              required: ["textSnippet", "explanation", "riskLevel", "category"]
+                required: ["textSnippet", "explanation", "riskLevel", "category"]
+              }
             }
-          }
-        },
-        required: ["summary", "overallRisk", "highlights", "sender"]
+          },
+          required: ["summary", "overallRisk", "highlights", "sender"]
+        }
       }
-    }
-  });
+    });
 
-    const result = JSON.parse(response.text || "{}");
+    // Tratamento Robusto de JSON
+    // O modelo pode retornar Markdown ```json ... ``` ou texto introdutório.
+    // Esta lógica encontra a primeira chave '{' e a última '}' para extrair apenas o objeto JSON válido.
+    const rawText = response.text || "{}";
+    let jsonString = rawText;
+    
+    const firstOpen = rawText.indexOf('{');
+    const lastClose = rawText.lastIndexOf('}');
+
+    if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+        jsonString = rawText.substring(firstOpen, lastClose + 1);
+    }
+
+    const result = JSON.parse(jsonString);
     
     // Add unique IDs to highlights for UI handling
     const highlightsWithIds = (result.highlights || []).map((h: any, index: number) => ({
@@ -105,7 +125,7 @@ export const analyzeDocumentWithGemini = async (
     };
 
   } catch (error) {
-    console.error("Gemini analysis failed:", error);
+    console.error("Gemini analysis failed details:", error);
     throw new Error("Falha na comunicação com a IA Clarity. Tente novamente.");
   }
 };
