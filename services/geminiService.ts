@@ -16,9 +16,9 @@ export const analyzeDocumentWithGemini = async (
     throw new Error("Erro de Ambiente: 'process.env.API_KEY' não está acessível. Verifique a configuração do build/deploy.");
   }
 
-  if (!apiKey) {
-    console.error("API Key missing");
-    throw new Error("Chave de API ausente. Por favor, configure a API Key.");
+  if (!apiKey || apiKey === "INSIRA_SUA_NOVA_CHAVE_AQUI") {
+    console.error("API Key missing or default");
+    throw new Error("Chave de API inválida. Edite o arquivo index.html e insira sua nova chave do Google AI Studio.");
   }
 
   const ai = new GoogleGenAI({ apiKey: apiKey });
@@ -140,19 +140,20 @@ export const analyzeDocumentWithGemini = async (
     console.error("Gemini analysis failed details:", error);
     
     let userMessage = "Falha na comunicação com a IA Clarity.";
+    const errorMsg = error.message || "";
 
-    if (error.message) {
-        if (error.message.includes("403")) {
-            userMessage = "Erro 403: Acesso Negado. Verifique se o domínio do deploy está autorizado na chave de API.";
-        } else if (error.message.includes("400")) {
-             userMessage = "Erro 400: Requisição Inválida. O documento pode ser muito grande ou corrompido.";
-        } else if (error.message.includes("429")) {
-            userMessage = "Erro 429: Cota de API excedida. Aguarde um momento.";
-        } else if (error.message.includes("fetch failed")) {
-             userMessage = "Erro de Conexão: Verifique sua internet ou bloqueadores de anúncio.";
-        } else {
-             userMessage = `Erro: ${error.message}`;
-        }
+    if (errorMsg.includes("leaked") || (errorMsg.includes("403") && errorMsg.includes("key"))) {
+        userMessage = "CHAVE BLOQUEADA: O Google detectou que sua chave vazou e a bloqueou. Gere uma nova chave no AI Studio e atualize o código.";
+    } else if (errorMsg.includes("403")) {
+        userMessage = "Erro 403: Acesso Negado. Verifique se a chave de API é válida.";
+    } else if (errorMsg.includes("400")) {
+         userMessage = "Erro 400: Requisição Inválida. O documento pode ser muito grande ou corrompido.";
+    } else if (errorMsg.includes("429")) {
+        userMessage = "Erro 429: Cota de API excedida. Aguarde um momento.";
+    } else if (errorMsg.includes("fetch failed")) {
+         userMessage = "Erro de Conexão: Verifique sua internet ou bloqueadores de anúncio.";
+    } else {
+         userMessage = `Erro: ${errorMsg}`;
     }
     
     throw new Error(userMessage);
