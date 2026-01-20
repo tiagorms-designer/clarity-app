@@ -6,12 +6,22 @@ const GEMINI_MODEL = "gemini-3-flash-preview";
 export const analyzeDocumentWithGemini = async (
   text: string
 ): Promise<{ summary: string; overallRisk: RiskLevel; highlights: Highlight[]; sender: string }> => {
-  if (!process.env.API_KEY) {
-    console.error("API Key missing");
-    throw new Error("Chave de API ausente. Por favor, selecione uma chave.");
+  
+  // Safety check for environment variable access to prevent crash in browsers if process is undefined
+  let apiKey: string | undefined;
+  try {
+    apiKey = process.env.API_KEY;
+  } catch (e) {
+    console.error("Environment variable access failed:", e);
+    throw new Error("Erro de Ambiente: 'process.env.API_KEY' não está acessível. Verifique a configuração do build/deploy.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  if (!apiKey) {
+    console.error("API Key missing");
+    throw new Error("Chave de API ausente. Por favor, configure a API Key.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey: apiKey });
 
   const prompt = `
     Você é a Clarity AI, uma especialista em análise de riscos contratuais e operacionais.
@@ -40,7 +50,6 @@ export const analyzeDocumentWithGemini = async (
       model: GEMINI_MODEL,
       contents: prompt,
       config: {
-        // Configurações de segurança para evitar bloqueio de termos jurídicos/contratuais
         safetySettings: [
             { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
             { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -96,12 +105,10 @@ export const analyzeDocumentWithGemini = async (
       }
     });
 
-    // Tratamento Robusto de JSON
-    // O modelo pode retornar Markdown ```json ... ``` ou texto introdutório.
-    // Esta lógica encontra a primeira chave '{' e a última '}' para extrair apenas o objeto JSON válido.
     const rawText = response.text || "{}";
     let jsonString = rawText;
     
+    // Robust extraction of JSON object
     const firstOpen = rawText.indexOf('{');
     const lastClose = rawText.lastIndexOf('}');
 
@@ -109,9 +116,14 @@ export const analyzeDocumentWithGemini = async (
         jsonString = rawText.substring(firstOpen, lastClose + 1);
     }
 
-    const result = JSON.parse(jsonString);
+    let result;
+    try {
+        result = JSON.parse(jsonString);
+    } catch (parseError) {
+        console.error("JSON Parse Error:", parseError, "Raw Text:", rawText);
+        throw new Error("A IA retornou um formato inválido. Tente novamente.");
+    }
     
-    // Add unique IDs to highlights for UI handling
     const highlightsWithIds = (result.highlights || []).map((h: any, index: number) => ({
       ...h,
       id: `gen-h-${Date.now()}-${index}`
@@ -124,9 +136,26 @@ export const analyzeDocumentWithGemini = async (
       highlights: highlightsWithIds
     };
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini analysis failed details:", error);
-    throw new Error("Falha na comunicação com a IA Clarity. Tente novamente.");
+    
+    let userMessage = "Falha na comunicação com a IA Clarity.";
+
+    if (error.message) {
+        if (error.message.includes("403")) {
+            userMessage = "Erro 403: Acesso Negado. Verifique se o domínio do deploy está autorizado na chave de API.";
+        } else if (error.message.includes("400")) {
+             userMessage = "Erro 400: Requisição Inválida. O documento pode ser muito grande ou corrompido.";
+        } else if (error.message.includes("429")) {
+            userMessage = "Erro 429: Cota de API excedida. Aguarde um momento.";
+        } else if (error.message.includes("fetch failed")) {
+             userMessage = "Erro de Conexão: Verifique sua internet ou bloqueadores de anúncio.";
+        } else {
+             userMessage = `Erro: ${error.message}`;
+        }
+    }
+    
+    throw new Error(userMessage);
   }
 };
 
@@ -135,9 +164,16 @@ export const getRemediationSuggestion = async (
     riskExplanation: string,
     category: string
 ): Promise<string> => {
-    if (!process.env.API_KEY) return "Erro: Chave de API não configurada.";
+    let apiKey: string | undefined;
+    try {
+        apiKey = process.env.API_KEY;
+    } catch {
+        return "Erro: Variáveis de ambiente inacessíveis.";
+    }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    if (!apiKey) return "Erro: Chave de API não configurada.";
+
+    const ai = new GoogleGenAI({ apiKey: apiKey });
     const prompt = `
       Atue como a Clarity, uma IA especialista em gestão de riscos operacionais e jurídicos.
       
