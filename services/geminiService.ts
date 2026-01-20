@@ -6,12 +6,14 @@ const GEMINI_MODEL = "gemini-3-flash-preview";
 export const analyzeDocumentWithGemini = async (
   text: string
 ): Promise<{ summary: string; overallRisk: RiskLevel; highlights: Highlight[]; sender: string }> => {
-  if (!process.env.API_KEY) {
-    console.error("API Key missing");
-    throw new Error("Chave de API ausente. Por favor, selecione uma chave.");
+  // Check for both VITE_ prefixed (local development) and standard API_KEY (Vercel)
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.API_KEY;
+  if (!apiKey) {
+    console.error("API Key missing. Checked VITE_GEMINI_API_KEY and API_KEY.");
+    throw new Error("Chave de API ausente. Configure a variável API_KEY na Vercel.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
     Você é a Clarity AI, uma especialista em análise de riscos contratuais e operacionais.
