@@ -34,6 +34,11 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
   const [showSuccess, setShowSuccess] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
+  // Global Risk Calculation
+  const risks = document.highlights.filter(h => h.riskLevel !== 'LOW' && h.riskLevel !== 'NEUTRAL');
+  const resolvedCount = risks.filter(h => !!h.remediation).length;
+  const allRisksResolved = risks.length > 0 && resolvedCount === risks.length;
+
   // Helper to determine smart defaults based on risk context
   const applySmartDefaults = (highlight: Highlight) => {
     // 1. Suggest Priority based on Risk Level
@@ -56,7 +61,6 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
 
     // 3. Suggest Deadline
     const today = new Date();
-    // Removed unreachable 'CRITICAL' check as suggestedPriority logic above only produces HIGH, MEDIUM, or LOW
     const daysToAdd = suggestedPriority === 'HIGH' ? 5 : suggestedPriority === 'MEDIUM' ? 10 : 30;
     today.setDate(today.getDate() + daysToAdd);
     setDeadline(today.toISOString().split('T')[0]);
@@ -129,6 +133,10 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
     }, 600);
   };
 
+  const handleFinishDocument = () => {
+    onGlobalAction('VALIDATE', 'Documento validado após verificação e mitigação de todos os riscos.');
+  };
+
   const getLabelForAction = (type: string) => {
       const map: Record<string, string> = {
           'REVISION': 'Revisão Jurídica',
@@ -146,7 +154,7 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
 
   // --- STATE 1: ACTION PLAN / CHECKLIST (When nothing selected) ---
   if (!selectedHighlight) {
-    // NEW: Check if document is already finalized (Approved)
+    // Check if document is already finalized (Approved)
     if (document.status === DocStatus.APPROVED) {
         return (
             <div className="flex flex-col h-full bg-white items-center justify-center p-8 text-center animate-in fade-in duration-500">
@@ -178,8 +186,6 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
         );
     }
 
-    const risks = document.highlights.filter(h => h.riskLevel !== 'LOW' && h.riskLevel !== 'NEUTRAL');
-    const resolvedCount = risks.filter(h => !!h.remediation).length;
     const progress = risks.length > 0 ? (resolvedCount / risks.length) * 100 : 100;
 
     return (
@@ -236,7 +242,7 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         {isResolved ? (
-                                             // VIEW FOR RESOLVED ITEMS (Show Solution)
+                                             // VIEW FOR RESOLVED ITEMS
                                              <>
                                                 <p className="text-xs font-bold text-dark truncate">
                                                     {getLabelForAction(risk.remediation!.actionType)}
@@ -247,7 +253,7 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
                                                 </p>
                                              </>
                                         ) : (
-                                            // VIEW FOR PENDING ITEMS (Show Task)
+                                            // VIEW FOR PENDING ITEMS
                                             <>
                                                 <div className="flex items-center gap-2 mb-0.5">
                                                     <p className="text-xs font-bold text-secondary uppercase tracking-wider truncate">
@@ -275,10 +281,10 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
             
             <div className="p-4 border-t border-gray-100 bg-white shadow-[0_-5px_20px_rgba(0,0,0,0.02)]">
                  <button 
-                    onClick={() => onGlobalAction('VALIDATE', 'Documento validado após verificação do plano de ação.')}
-                    disabled={resolvedCount < risks.length}
+                    onClick={handleFinishDocument}
+                    disabled={!allRisksResolved && risks.length > 0}
                     className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all shadow-md
-                        ${resolvedCount < risks.length 
+                        ${(!allRisksResolved && risks.length > 0)
                             ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200' 
                             : 'bg-primary text-white hover:bg-indigo-600 hover:shadow-lg shadow-indigo-100'
                         }
@@ -287,7 +293,7 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
                     <ShieldCheck className="w-4 h-4" />
                     Finalizar Documento
                 </button>
-                {resolvedCount < risks.length && (
+                {!allRisksResolved && risks.length > 0 && (
                     <p className="text-[10px] text-center text-red-400 mt-2 font-medium">
                         Resolva todas as pendências para finalizar.
                     </p>
@@ -297,27 +303,53 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
     );
   }
 
-  // --- STATE 2: Success Message ---
+  // --- STATE 2: Success Message (Just saved a plan) ---
   if (showSuccess) {
       return (
           <div className="flex flex-col h-full items-center justify-center p-8 text-center animate-in fade-in zoom-in-95 bg-white">
               <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-4 shadow-sm border border-emerald-100">
                   <CheckCircle2 className="w-8 h-8" />
               </div>
-              <h3 className="text-lg font-bold text-dark mb-2">Ação Registrada!</h3>
+              <h3 className="text-lg font-bold text-dark mb-2">
+                  {allRisksResolved ? 'Todos os Riscos Tratados!' : 'Ação Registrada!'}
+              </h3>
               <p className="text-xs text-secondary mb-8 max-w-[240px]">
-                  O plano foi salvo com sucesso e o risco foi marcado como tratado.
+                  {allRisksResolved 
+                    ? 'Excelente! Você resolveu todas as pendências identificadas. O documento está pronto para ser finalizado.'
+                    : 'O plano foi salvo com sucesso e o risco foi marcado como tratado.'
+                  }
               </p>
-              <button 
-                  onClick={() => {
-                      setShowSuccess(false);
-                      // Goes to View Mode because selectedHighlight still exists and isEditing is false
-                  }}
-                  className="w-full bg-primary text-white font-bold py-3 rounded-xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 text-sm shadow-lg shadow-indigo-100"
-              >
-                  Visualizar Plano
-                  <ArrowRight className="w-4 h-4" />
-              </button>
+              
+              <div className="flex flex-col gap-3 w-full">
+                {/* PRIMARY ACTION: If all resolved, Show FINALIZE. Else Show VIEW PLAN */}
+                {allRisksResolved ? (
+                    <button 
+                        onClick={handleFinishDocument}
+                        className="w-full bg-primary text-white font-bold py-3 rounded-xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 text-sm shadow-lg shadow-indigo-100"
+                    >
+                        <ShieldCheck className="w-4 h-4" />
+                        Finalizar Documento
+                    </button>
+                ) : (
+                    <button 
+                        onClick={() => { setShowSuccess(false); }}
+                        className="w-full bg-primary text-white font-bold py-3 rounded-xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 text-sm shadow-lg shadow-indigo-100"
+                    >
+                        Visualizar Plano
+                        <ArrowRight className="w-4 h-4" />
+                    </button>
+                )}
+
+                {/* SECONDARY ACTION */}
+                {allRisksResolved && (
+                    <button 
+                        onClick={() => { setShowSuccess(false); }}
+                        className="w-full bg-white border border-gray-200 text-secondary font-bold py-3 rounded-xl hover:bg-gray-50 transition-all flex items-center justify-center gap-2 text-sm"
+                    >
+                        Revisar Plano
+                    </button>
+                )}
+              </div>
           </div>
       );
   }
@@ -389,7 +421,7 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
                         </div>
                     </div>
 
-                    {/* Instructions Block - IMPROVED FORMATTING */}
+                    {/* Instructions Block */}
                     <div>
                         <h4 className="text-xs font-bold text-dark mb-3 flex items-center gap-2">
                             <FileText className="w-4 h-4 text-secondary" />
@@ -401,15 +433,26 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
                     </div>
                </div>
 
-               {/* Footer Actions */}
-               <div className="p-4 border-t border-gray-100 bg-white flex gap-3">
-                   <button 
-                        onClick={() => setIsEditing(true)}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-white border border-gray-200 text-dark text-sm font-bold hover:bg-gray-50 transition-colors"
-                   >
-                        <Edit3 className="w-4 h-4" />
-                        Editar Plano
-                   </button>
+               {/* Footer Actions - UPDATED */}
+               <div className="p-4 border-t border-gray-100 bg-white flex flex-col gap-3">
+                   {allRisksResolved && (
+                        <button 
+                            onClick={handleFinishDocument}
+                            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-white text-sm font-bold hover:bg-indigo-600 transition-all shadow-md shadow-indigo-100 animate-in slide-in-from-bottom-2"
+                        >
+                            <ShieldCheck className="w-4 h-4" />
+                            Finalizar Documento
+                        </button>
+                   )}
+                   <div className="flex gap-3">
+                       <button 
+                            onClick={() => setIsEditing(true)}
+                            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-white border border-gray-200 text-dark text-sm font-bold hover:bg-gray-50 transition-colors"
+                       >
+                            <Edit3 className="w-4 h-4" />
+                            Editar Plano
+                       </button>
+                   </div>
                </div>
           </div>
       );
@@ -418,7 +461,6 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
   // --- STATE 4: WIZARD FORM (Editing or New) ---
   return (
     <div className="flex flex-col h-full bg-white animate-in slide-in-from-bottom-4 duration-300">
-      
       {/* Header */}
       <div className="p-5 border-b border-gray-100 bg-gray-50/50">
         <div className="flex justify-between items-center mb-2">
@@ -453,7 +495,6 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
 
       {/* Steps Content */}
       <div className="p-5 flex-1 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
-        
         {/* STEP 1: Definition */}
         {currentStep === 1 && (
             <div className="space-y-5 animate-in slide-in-from-right-4 fade-in duration-300">
