@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, AlertTriangle, Calendar, User, FileText, CheckCircle2, Save, X, ArrowRight, ClipboardList, Clock, ArrowLeft, ChevronRight, Edit3, Loader2, Bot, Circle, AlertOctagon, ListTodo, ChevronDown } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, Calendar, User, FileText, CheckCircle2, Save, X, ArrowRight, ClipboardList, Clock, ArrowLeft, ChevronRight, Edit3, Loader2, Bot, Circle, AlertOctagon, ListTodo, ChevronDown, RotateCcw } from 'lucide-react';
 import { Document, Highlight, RiskLevel, RemediationPlan, DocStatus } from '../types';
 import { getRemediationSuggestion } from '../services/geminiService';
 
@@ -137,6 +137,10 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
     onGlobalAction('VALIDATE', 'Documento validado após verificação e mitigação de todos os riscos.');
   };
 
+  const handleReopenDocument = () => {
+    onGlobalAction('FLAG', 'Documento reaberto manualmente para ajustes no plano de ação.');
+  };
+
   const getLabelForAction = (type: string) => {
       const map: Record<string, string> = {
           'REVISION': 'Revisão Jurídica',
@@ -157,30 +161,43 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
     // Check if document is already finalized (Approved)
     if (document.status === DocStatus.APPROVED) {
         return (
-            <div className="flex flex-col h-full bg-white items-center justify-center p-8 text-center animate-in fade-in duration-500">
-                <div className="w-24 h-24 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-6 shadow-soft border border-emerald-100">
-                    <ShieldCheck className="w-12 h-12" />
+            <div className="flex flex-col h-full bg-white animate-in fade-in duration-500">
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                    <div className="w-24 h-24 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-6 shadow-soft border border-emerald-100">
+                        <ShieldCheck className="w-12 h-12" />
+                    </div>
+                    <h3 className="text-xl font-bold text-dark mb-2">Documento Finalizado</h3>
+                    <p className="text-sm text-secondary mb-8 max-w-[280px] leading-relaxed">
+                        Parabéns! Todas as pendências foram tratadas e o documento encontra-se <span className="text-emerald-600 font-bold">Aprovado</span>.
+                    </p>
+                    
+                    <div className="w-full bg-gray-50 rounded-2xl p-5 border border-gray-100 text-left">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center border border-gray-200 text-primary font-bold shadow-sm">
+                                <User className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold text-secondary uppercase tracking-wider">Validado por</p>
+                                <p className="text-sm font-bold text-dark">Você</p>
+                            </div>
+                        </div>
+                        <div className="h-px bg-gray-200 w-full mb-4"></div>
+                        <div className="flex items-center gap-2 text-emerald-600 font-bold text-sm bg-emerald-50/50 p-2 rounded-lg border border-emerald-100/50">
+                            <CheckCircle2 className="w-4 h-4" />
+                            Conformidade Verificada
+                        </div>
+                    </div>
                 </div>
-                <h3 className="text-xl font-bold text-dark mb-2">Documento Finalizado</h3>
-                <p className="text-sm text-secondary mb-8 max-w-[280px] leading-relaxed">
-                    Parabéns! Todas as pendências foram tratadas e o documento encontra-se <span className="text-emerald-600 font-bold">Aprovado</span>.
-                </p>
                 
-                <div className="w-full bg-gray-50 rounded-2xl p-5 border border-gray-100 text-left">
-                     <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center border border-gray-200 text-primary font-bold shadow-sm">
-                             <User className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold text-secondary uppercase tracking-wider">Validado por</p>
-                            <p className="text-sm font-bold text-dark">Você</p>
-                        </div>
-                     </div>
-                     <div className="h-px bg-gray-200 w-full mb-4"></div>
-                     <div className="flex items-center gap-2 text-emerald-600 font-bold text-sm bg-emerald-50/50 p-2 rounded-lg border border-emerald-100/50">
-                        <CheckCircle2 className="w-4 h-4" />
-                        Conformidade Verificada
-                     </div>
+                {/* REOPEN BUTTON FOOTER */}
+                <div className="p-4 border-t border-gray-100 bg-white shadow-[0_-5px_20px_rgba(0,0,0,0.02)]">
+                     <button 
+                        onClick={handleReopenDocument}
+                        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-white border border-gray-200 text-secondary text-sm font-bold hover:bg-gray-50 hover:text-dark transition-all"
+                    >
+                        <RotateCcw className="w-4 h-4" />
+                        Voltar para Plano de Ação
+                    </button>
                 </div>
             </div>
         );
@@ -435,7 +452,7 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
 
                {/* Footer Actions - UPDATED */}
                <div className="p-4 border-t border-gray-100 bg-white flex flex-col gap-3">
-                   {allRisksResolved && (
+                   {allRisksResolved && document.status !== DocStatus.APPROVED && (
                         <button 
                             onClick={handleFinishDocument}
                             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-white text-sm font-bold hover:bg-indigo-600 transition-all shadow-md shadow-indigo-100 animate-in slide-in-from-bottom-2"
