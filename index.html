@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clarity - Inteligência Operacional</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              border: "var(--border)",
+              input: "var(--input)",
+              ring: "var(--ring)",
+              background: "var(--background)",
+              surface: "var(--card)", // Maps surface to card background
+              
+              // Semantic Colors Mapped to New Theme
+              primary: {
+                DEFAULT: "var(--primary)",
+                foreground: "var(--primary-foreground)",
+              },
+              // Existing app uses 'secondary' for gray text, so we map it to muted-foreground
+              secondary: {
+                DEFAULT: "var(--muted-foreground)", 
+                foreground: "var(--secondary-foreground)",
+              },
+              dark: "var(--foreground)", // Maps 'text-dark' to the main foreground color
+              
+              muted: {
+                DEFAULT: "var(--muted)",
+                foreground: "var(--muted-foreground)",
+              },
+              accent: {
+                DEFAULT: "var(--accent)",
+                foreground: "var(--accent-foreground)",
+              },
+              popover: {
+                DEFAULT: "var(--popover)",
+                foreground: "var(--popover-foreground)",
+              },
+              card: {
+                DEFAULT: "var(--card)",
+                foreground: "var(--card-foreground)",
+              },
+              destructive: {
+                DEFAULT: "var(--destructive)",
+                foreground: "var(--destructive-foreground)",
+              },
+              
+              // Legacy Risk Colors (Preserved or Tweaked if needed)
+              risk: {
+                high: '#ef4444', // Matches --destructive
+                medium: '#FFB547', 
+                low: '#10b981', // Emerald-500 equivalent
+                neutral: '#8a95ae' // Matches muted-foreground
+              }
+            },
+            fontFamily: {
+              sans: ['DM Sans', 'Inter', 'sans-serif'], 
+            },
+            borderRadius: {
+              lg: "var(--radius)",
+              md: "calc(var(--radius) - 2px)",
+              sm: "calc(var(--radius) - 4px)",
+              'xl': '1rem',
+              '2xl': '1.25rem',
+              '3xl': '1.5rem', 
+            },
+            boxShadow: {
+              'soft': 'var(--shadow-md)', // Remapped to the new shadow system
+              'sm': 'var(--shadow-sm)',
+              'md': 'var(--shadow-md)',
+              'lg': 'var(--shadow-lg)',
+              'xl': 'var(--shadow-xl)',
+            }
+          }
+        }
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --background: #f8f8fc;
+        --foreground: #29325d;
+        --card: #ffffff;
+        --card-foreground: #29325d;
+        --popover: #ffffff;
+        --popover-foreground: #29325d;
+        --primary: #6f52ed;
+        --primary-foreground: #ffffff;
+        --secondary: #eceff5;
+        --secondary-foreground: #29325d;
+        --muted: #f2f5fa;
+        --muted-foreground: #8a95ae;
+        --accent: #e0dbfb;
+        --accent-foreground: #6f52ed;
+        --destructive: #ef4444;
+        --destructive-foreground: #ffffff;
+        --border: #e8ebf3;
+        --input: #f2f5fa;
+        --ring: #6f52ed;
+        --radius: 0.75rem;
+        
+        /* Shadows */
+        --shadow-sm: 0px 1px 2px 0px rgba(111, 82, 237, 0.05);
+        --shadow-md: 0px 4px 12px 0px rgba(111, 82, 237, 0.08); /* Soft violet tint shadow */
+        --shadow-lg: 0px 8px 24px 0px rgba(111, 82, 237, 0.12);
+        --shadow-xl: 0px 20px 32px 0px rgba(111, 82, 237, 0.15);
+      }
+
+      .dark {
+        --background: #1f253c;
+        --foreground: #e6e8ef;
+        --card: #29325d;
+        --card-foreground: #e6e8ef;
+        --popover: #1f253c;
+        --popover-foreground: #e6e8ef;
+        --primary: #6f52ed;
+        --primary-foreground: #ffffff;
+        --secondary: #3e4a78;
+        --secondary-foreground: #e6e8ef;
+        --muted: #343e63;
+        --muted-foreground: #a0a8bf;
+        --accent: #3e4a78;
+        --accent-foreground: #e6e8ef;
+        --destructive: #ef4444;
+        --destructive-foreground: #ffffff;
+        --border: #4a557a;
+        --input: #3e4a78;
+        --ring: #6f52ed;
+        
+        --shadow-sm: 0px 1px 2px 0px rgba(0, 0, 0, 0.3);
+        --shadow-md: 0px 4px 6px -1px rgba(0, 0, 0, 0.3);
+        --shadow-lg: 0px 10px 15px -3px rgba(0, 0, 0, 0.3);
+        --shadow-xl: 0px 20px 25px -5px rgba(0, 0, 0, 0.3);
+      }
+
+      body {
+        font-family: 'DM Sans', sans-serif;
+        background-color: var(--background);
+        color: var(--foreground);
+        -webkit-font-smoothing: antialiased;
+      }
+      
+      /* Custom scrollbar matched to theme */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--muted-foreground);
+        border-radius: 3px;
+        opacity: 0.5;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--primary);
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.37.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "pdfjs-dist": "https://esm.sh/pdfjs-dist@3.11.174",
+    "mammoth": "https://esm.sh/mammoth@1.6.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
