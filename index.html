@@ -4,9 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Clarity - Inteligência Operacional</title>
-    <link rel="icon" type="image/svg+xml" href="https://raw.githubusercontent.com/tiagorms-designer/clarity-assets/refs/heads/main/public%20/brand/logo.svg" />
+    <link rel="icon" type="image/svg+xml" href="https://raw.githubusercontent.com/tiagorms-designer/clarity-assets/refs/heads/main/public/brand/logo.svg" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
+      // Configuração de Variáveis de Ambiente para Deploy (Polyfill)
+      // Garante que a chave da API esteja acessível via process.env.API_KEY mesmo no navegador
+      window.process = {
+        env: {
+          API_KEY: "AIzaSyDGUzSVoomL5PkK6E6Rv5wDMNjnEbaunMw"
+        }
+      };
+
       tailwind.config = {
         darkMode: 'class',
         theme: {
