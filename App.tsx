@@ -5,11 +5,12 @@ import { DocumentUpload } from './components/DocumentUpload';
 import { DocumentViewer } from './components/DocumentViewer';
 import { DocumentLibrary } from './components/DocumentLibrary';
 import { ApiKeyModal } from './components/ApiKeyModal';
-import { Document, ViewState, RiskLevel, RemediationPlan } from './types';
+import { Document, ViewState, RiskLevel, RemediationPlan, DocStatus } from './types';
 import { MOCK_DOCUMENTS } from './constants';
 import { ShieldCheck, Flag, CheckCircle2, FileText, AlertOctagon, ClipboardCheck, X, User, Calendar, FileType } from 'lucide-react';
 
-const LOCAL_STORAGE_KEY = 'clarity-app-documents-v1';
+// BUMP TO V2 to force reload of corrected mock data
+const LOCAL_STORAGE_KEY = 'clarity-app-documents-v2';
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('DASHBOARD');
@@ -44,13 +45,20 @@ const App: React.FC = () => {
 
   const activeDoc = documents.find(d => d.id === selectedDocId);
 
-  const handleSelectDocument = (doc: Document) => {
-    setSelectedDocId(doc.id);
-    setView('VIEWER');
-  };
-
   const handleUpdateDocument = (updatedDoc: Document) => {
     setDocuments(prev => prev.map(d => d.id === updatedDoc.id ? updatedDoc : d));
+  };
+
+  const handleSelectDocument = (doc: Document) => {
+    // WORKFLOW LOGIC:
+    // If opening an "Inbox" document, move it to "In Analysis"
+    if (doc.status === DocStatus.INBOX) {
+        const updatedDoc = { ...doc, status: DocStatus.IN_ANALYSIS };
+        handleUpdateDocument(updatedDoc);
+    }
+    
+    setSelectedDocId(doc.id);
+    setView('VIEWER');
   };
 
   const handleUploadComplete = (newDoc: Document) => {

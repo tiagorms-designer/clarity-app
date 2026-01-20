@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, AlertTriangle, Calendar, User, FileText, CheckCircle2, Save, X, ArrowRight, ClipboardList, Clock, ArrowLeft, ChevronRight, Edit3, Loader2, Bot, Circle, AlertOctagon, ListTodo } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, Calendar, User, FileText, CheckCircle2, Save, X, ArrowRight, ClipboardList, Clock, ArrowLeft, ChevronRight, Edit3, Loader2, Bot, Circle, AlertOctagon, ListTodo, ChevronDown } from 'lucide-react';
 import { Document, Highlight, RiskLevel, RemediationPlan, DocStatus } from '../types';
 import { getRemediationSuggestion } from '../services/geminiService';
 
@@ -9,6 +9,7 @@ interface ActionPanelProps {
   onSaveRemediation: (highlightId: string, plan: RemediationPlan) => void;
   onGlobalAction: (action: 'VALIDATE' | 'FLAG', note: string) => void;
   onClose?: () => void;
+  onToggleMinimize?: () => void;
 }
 
 export const ActionPanel: React.FC<ActionPanelProps> = ({ 
@@ -16,7 +17,8 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
   selectedHighlight, 
   onSaveRemediation,
   onGlobalAction,
-  onClose
+  onClose,
+  onToggleMinimize
 }) => {
   // Form State
   const [actionType, setActionType] = useState<RemediationPlan['actionType']>('REVISION');
@@ -331,9 +333,16 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
                             <CheckCircle2 className="w-4 h-4" />
                             Ação Definida
                         </h3>
-                        <button onClick={onClose} className="text-gray-400 hover:text-dark">
-                            <X className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                             {onToggleMinimize && (
+                                <button onClick={onToggleMinimize} className="p-1 text-emerald-700/60 hover:text-emerald-900 rounded-full hover:bg-emerald-100/50 transition-colors" title="Minimizar Painel">
+                                    <ChevronDown className="w-4 h-4" />
+                                </button>
+                            )}
+                            <button onClick={onClose} className="p-1 text-emerald-700/60 hover:text-emerald-900 rounded-full hover:bg-emerald-100/50 transition-colors" title="Fechar Seleção">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
                     </div>
                     <p className="text-xs text-emerald-600/70">
                         Este risco já possui um plano de mitigação registrado.
@@ -417,9 +426,16 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
                 <FileText className="w-4 h-4 text-primary" />
                 {isEditing ? 'Editar Ação' : 'Definir Ação'}
             </h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-dark">
-                <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1">
+                {onToggleMinimize && (
+                    <button onClick={onToggleMinimize} className="p-1 text-gray-400 hover:text-dark rounded-full hover:bg-gray-200 transition-colors" title="Minimizar Painel">
+                        <ChevronDown className="w-4 h-4" />
+                    </button>
+                )}
+                <button onClick={onClose} className="p-1 text-gray-400 hover:text-dark rounded-full hover:bg-gray-200 transition-colors" title="Fechar Seleção">
+                    <X className="w-4 h-4" />
+                </button>
+            </div>
         </div>
         
         {/* Progress Steps */}
@@ -548,7 +564,7 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
                     </div>
                     
                     <textarea 
-                        className="w-full flex-1 min-h-[120px] text-sm p-4 bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-primary resize-none leading-relaxed placeholder-gray-400 font-medium shadow-sm transition-all focus:ring-4 focus:ring-primary/10"
+                        className="w-full flex-1 min-h-[200px] text-sm p-4 bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-primary resize-none leading-relaxed placeholder-gray-400 font-medium shadow-sm transition-all focus:ring-4 focus:ring-primary/10"
                         placeholder="Descreva detalhadamente o que deve ser feito..."
                         value={instructions}
                         autoFocus={!isGeneratingAI}

@@ -111,7 +111,7 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
 
       // --- LOGIC UPDATE: DETERMINE STATUS BASED ON RISK ---
       const initialStatus = (analysis.overallRisk === RiskLevel.HIGH || analysis.overallRisk === RiskLevel.MEDIUM)
-         ? DocStatus.RISK_WARNING
+         ? DocStatus.INBOX
          : DocStatus.COMPLIANT;
 
       const newDoc: Document = {

@@ -105,9 +105,10 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ documents, onS
                     onChange={(e) => setStatusFilter(e.target.value as any)}
                 >
                     <option value="ALL">Todos</option>
-                    <option value={DocStatus.RISK_WARNING}>Atenção Requerida</option>
-                    <option value={DocStatus.COMPLIANT}>Conforme</option>
-                    <option value={DocStatus.APPROVED}>Aprovado</option>
+                    <option value={DocStatus.INBOX}>Caixa de Entrada</option>
+                    <option value={DocStatus.IN_ANALYSIS}>Em Análise</option>
+                    <option value={DocStatus.IN_PLANNING}>Em Plano de Ação</option>
+                    <option value={DocStatus.APPROVED}>Finalizado</option>
                 </select>
             </div>
 
@@ -178,18 +179,26 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ documents, onS
                                 </td>
 
                                 <td className="px-6 py-4">
-                                    {/* STATUS BADGE - UPDATED (NO ICONS) */}
+                                    {/* STATUS BADGE - UPDATED WORKFLOW */}
                                     {doc.status === DocStatus.APPROVED ? (
                                         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 w-fit">
-                                            <span className="font-bold text-xs">Aprovado</span>
+                                            <span className="font-bold text-xs">Finalizado</span>
                                         </div>
                                     ) : doc.status === DocStatus.COMPLIANT ? (
-                                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 w-fit">
-                                            <span className="font-bold text-xs">Conforme</span>
+                                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 w-fit">
+                                            <span className="font-bold text-xs">Finalizado</span>
+                                        </div>
+                                    ) : doc.status === DocStatus.IN_PLANNING ? (
+                                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-100 w-fit">
+                                            <span className="font-bold text-xs">Em Plano de Ação</span>
+                                        </div>
+                                    ) : doc.status === DocStatus.IN_ANALYSIS ? (
+                                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 w-fit">
+                                            <span className="font-bold text-xs">Em Análise</span>
                                         </div>
                                     ) : (
-                                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-100 w-fit">
-                                            <span className="font-bold text-xs">Atenção</span>
+                                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 w-fit">
+                                            <span className="font-bold text-xs">Caixa de Entrada</span>
                                         </div>
                                     )}
                                 </td>

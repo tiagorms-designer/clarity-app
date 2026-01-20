@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, Bot, AlertTriangle, FileCheck, Printer, Eye, FileText as FileTextIcon, History, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Bot, AlertTriangle, FileCheck, Printer, Eye, FileText as FileTextIcon, History, ChevronRight, ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import { Document, RiskLevel, RemediationPlan, Highlight, DocStatus } from '../types';
 import { ActionPanel } from './ActionPanel';
 
@@ -16,22 +16,33 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
   const [selectedHighlightId, setSelectedHighlightId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'DIGITAL' | 'ORIGINAL'>('DIGITAL');
   
+  // New States for UI UX improvements
+  const [riskFilter, setRiskFilter] = useState<'ALL' | RiskLevel>('ALL');
+  const [isPanelExpanded, setIsPanelExpanded] = useState(false);
+  
   const selectedHighlight = document.highlights.find(h => h.id === selectedHighlightId) || null;
+
+  // Filter Logic
+  const filteredHighlights = useMemo(() => {
+      if (riskFilter === 'ALL') return document.highlights;
+      return document.highlights.filter(h => h.riskLevel === riskFilter);
+  }, [document.highlights, riskFilter]);
+
+  // Auto-expand panel when a highlight is selected
+  useEffect(() => {
+      if (selectedHighlightId) {
+          setIsPanelExpanded(true);
+      }
+  }, [selectedHighlightId]);
 
   // Scroll to highlight when selected (Only works in Digital Mode)
   useEffect(() => {
     if (selectedHighlightId && viewMode === 'DIGITAL') {
-      // Small timeout to allow render cycle to complete (especially if switching views)
+      // Small timeout to allow render cycle to complete
       setTimeout(() => {
         const textElement = window.document.getElementById(`highlight-${selectedHighlightId}`);
         if (textElement) {
           textElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-        
-        // Auto-scroll sidebar logic
-        const cardElement = window.document.getElementById(`card-${selectedHighlightId}`);
-        if (cardElement) {
-          cardElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
       }, 100);
     }
@@ -56,13 +67,10 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
   };
 
   // Helper to find text index ignoring whitespace differences
-  // This is crucial because LLMs often replace newlines with spaces in their JSON output
   const findSnippetIndex = (content: string, snippet: string) => {
-      // 1. Try exact match first (fastest)
       const exactIdx = content.indexOf(snippet);
       if (exactIdx !== -1) return exactIdx;
 
-      // 2. Fuzzy match: match characters ignoring all whitespace
       const cleanSnippet = snippet.replace(/\s+/g, '');
       if (!cleanSnippet) return -1;
 
@@ -71,14 +79,13 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
 
       for (let i = 0; i < content.length; i++) {
           const char = content[i];
-          if (/\s/.test(char)) continue; // Skip document whitespace
+          if (/\s/.test(char)) continue; 
 
           if (char === cleanSnippet[snippetIdx]) {
-              if (snippetIdx === 0) startIdx = i; // Mark potential start
+              if (snippetIdx === 0) startIdx = i; 
               snippetIdx++;
-              if (snippetIdx === cleanSnippet.length) return startIdx; // Found full match
+              if (snippetIdx === cleanSnippet.length) return startIdx; 
           } else {
-              // Mismatch, reset. 
               if (startIdx !== -1) {
                  snippetIdx = 0;
                  startIdx = -1;
@@ -110,7 +117,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
           }
 
           currentPageText += para + '\n';
-          currentLength += para.length + 1; // +1 for newline
+          currentLength += para.length + 1; 
           globalIndexTracker += para.length + 1;
       });
 
@@ -124,14 +131,9 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
 
   // --- Render Single Page Content ---
   const renderPageContent = (pageText: string, pageStartIndex: number) => {
-    // 1. Identify highlights locations relative to this page
     const highlightsWithIndices = document.highlights.map(h => {
-        // Use robust finding logic instead of simple indexOf
         const exactIndex = findSnippetIndex(document.content, h.textSnippet);
-        
-        // Check if this highlight falls inside THIS page's range
         if (exactIndex !== -1 && exactIndex >= pageStartIndex && exactIndex < (pageStartIndex + pageText.length)) {
-             // Calculate local index relative to this page
              const localIndex = exactIndex - pageStartIndex;
              return { ...h, localIndex, length: h.textSnippet.length };
         }
@@ -141,24 +143,18 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
     // @ts-ignore
     .sort((a, b) => a.localIndex - b.localIndex);
 
-    // 2. Split page content by newlines for rendering
     const lines = pageText.split('\n');
     let currentLocalIndex = 0;
-
-    // Track which highlights have already been rendered (to avoid duplicate IDs if split across lines)
     const renderedHighlightIds = new Set<string>();
 
     return lines.map((line, lineIdx) => {
       const lineStart = currentLocalIndex;
       const lineEnd = currentLocalIndex + line.length;
-      
-      // Update local index for next iteration
-      currentLocalIndex += line.length + 1; // +1 for newline
+      currentLocalIndex += line.length + 1; 
 
       if (line.trim() === '') return <br key={lineIdx} className="mb-2" />;
 
-      // Styling - Updated for better Markdown-like appearance
-      let className = "mb-4 text-gray-700 leading-7 text-[15px]"; // Default paragraph style
+      let className = "mb-4 text-gray-700 leading-7 text-[15px]"; 
       let cleanLine = line;
       
       if (line.startsWith('# ')) {
@@ -179,11 +175,8 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
             cleanLine = line.replace('> ', '');
       }
 
-      // Find relevant highlights for this specific line
       // @ts-ignore
       const relevantHighlights = highlightsWithIndices.filter(h => 
-        // Logic handles partial highlights in lines:
-        // Starts before line end AND ends after line start
         h.localIndex < lineEnd && (h.localIndex + h.length) > lineStart
       );
 
@@ -191,26 +184,21 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
           return <p key={lineIdx} className={className}>{cleanLine}</p>;
       }
 
-      // Construct line with highlights
       const parts = [];
-      let cursorInLine = 0; // Relative to the start of this line
+      let cursorInLine = 0; 
 
       relevantHighlights.forEach((h, hIdx) => {
-          // Intersection logic relative to line
           const highlightStartInLine = Math.max(0, h.localIndex - lineStart);
           const highlightEndInLine = Math.min(line.length, (h.localIndex + h.length) - lineStart);
           
-          // Text before highlight
           if (highlightStartInLine > cursorInLine) {
               parts.push(<span key={`pre-${hIdx}`}>{line.substring(cursorInLine, highlightStartInLine)}</span>);
           }
 
-          // The highlight text
           const matchedText = line.substring(highlightStartInLine, highlightEndInLine);
           const isSelected = selectedHighlightId === h.id;
           const hasRemediation = !!h.remediation;
 
-          // Only assign the ID to the FIRST occurrence of the highlight to make anchoring precise
           const isFirstOccurrence = !renderedHighlightIds.has(h.id);
           if (isFirstOccurrence) renderedHighlightIds.add(h.id);
 
@@ -242,7 +230,6 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
           cursorInLine = highlightEndInLine;
       });
 
-      // Text after last highlight
       if (cursorInLine < line.length) {
           parts.push(<span key={`end`}>{line.substring(cursorInLine)}</span>);
       }
@@ -259,8 +246,18 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
           return h;
       });
 
+      // WORKFLOW LOGIC:
+      // If a plan is created, and status is "In Analysis" or "Inbox", move to "In Planning"
+      // If it's already "Approved", we probably shouldn't demote it automatically without explicit "Flag" action,
+      // but for editing plans, we keep current status or move to Planning.
+      let newStatus = document.status;
+      if (newStatus === DocStatus.IN_ANALYSIS || newStatus === DocStatus.INBOX) {
+          newStatus = DocStatus.IN_PLANNING;
+      }
+
       const updatedDoc = {
           ...document,
+          status: newStatus,
           highlights: updatedHighlights,
           history: [
               {
@@ -289,8 +286,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
     const updatedDoc: Document = {
       ...document,
       history: [newLog, ...document.history],
-      // Logic update: Validate now sets to APPROVED, Flag sets to RISK_WARNING
-      status: action === 'VALIDATE' ? DocStatus.APPROVED : DocStatus.RISK_WARNING
+      status: action === 'VALIDATE' ? DocStatus.APPROVED : DocStatus.IN_PLANNING // If flagged, goes back to planning
     };
     onUpdateDocument(updatedDoc);
   };
@@ -314,7 +310,6 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
         </div>
         
         <div className="flex items-center gap-3">
-            {/* View Toggle */}
             <div className="hidden md:flex bg-white p-1 rounded-xl shadow-sm border border-gray-100 mr-2">
                 <button 
                     onClick={() => setViewMode('DIGITAL')}
@@ -350,49 +345,49 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
       {/* Main Content Area */}
       <div className="flex-1 overflow-hidden flex flex-col lg:flex-row gap-6 px-6 md:px-8 pb-8">
         
-        {/* Left: Document View (Dual Mode) */}
+        {/* Left: Document View */}
         <div 
             className="flex-1 overflow-y-auto custom-scrollbar flex flex-col items-center bg-gray-200/50 rounded-3xl border border-gray-100/50 relative group shadow-inner py-8"
-            onClick={() => setSelectedHighlightId(null)}
+            onClick={() => {
+                // If clicking outside, we deselect IF the panel isn't in a focused editing state
+                // For now, we'll keep selection to allow toggling panel
+            }}
         >
           {viewMode === 'DIGITAL' ? (
-              <>
-                 <div className="w-full max-w-[210mm] space-y-8 pb-20">
-                    
-                    {pages.map((page, index) => (
-                        <div key={index} className="bg-white shadow-xl shadow-gray-300/40 min-h-[297mm] p-[20mm] relative animate-in fade-in duration-500">
-                             {/* Page Header */}
-                             {index === 0 && (
-                                 <div className="mb-12 border-b-2 border-dark pb-6">
-                                     <div className="flex justify-between items-start">
-                                         <div>
-                                             <h1 className="text-2xl font-bold text-gray-900 mb-2">{document.title}</h1>
-                                             <div className="text-sm text-gray-500">
-                                                 Documento ID: #{document.id.slice(-6).toUpperCase()} <br/>
-                                                 Gerado em: {new Date().toLocaleDateString('pt-BR')}
-                                             </div>
-                                         </div>
-                                         <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                                             <FileCheck className="w-6 h-6 text-primary" />
-                                         </div>
-                                     </div>
-                                 </div>
-                             )}
+              <div className="w-full max-w-[210mm] space-y-8 pb-20">
+                {pages.map((page, index) => (
+                    <div key={index} className="bg-white shadow-xl shadow-gray-300/40 min-h-[297mm] p-[20mm] relative animate-in fade-in duration-500">
+                            {/* Page Header */}
+                            {index === 0 && (
+                                <div className="mb-12 border-b-2 border-dark pb-6">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h1 className="text-2xl font-bold text-gray-900 mb-2">{document.title}</h1>
+                                            <div className="text-sm text-gray-500">
+                                                Documento ID: #{document.id.slice(-6).toUpperCase()} <br/>
+                                                Gerado em: {new Date().toLocaleDateString('pt-BR')}
+                                            </div>
+                                        </div>
+                                        <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                                            <FileCheck className="w-6 h-6 text-primary" />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
-                             {/* Content */}
-                             <div className="font-sans text-gray-800">
-                                 {renderPageContent(page.text, page.startIndex)}
-                             </div>
+                            {/* Content */}
+                            <div className="font-sans text-gray-800">
+                                {renderPageContent(page.text, page.startIndex)}
+                            </div>
 
-                             {/* Page Footer */}
-                             <div className="absolute bottom-6 left-0 w-full px-[20mm] flex justify-between items-end border-t border-gray-100 pt-4">
-                                 <div className="text-[9px] text-gray-400 uppercase tracking-widest font-bold">Confidencial • Uso Interno</div>
-                                 <div className="text-[10px] text-gray-400 font-medium">Página {index + 1} de {pages.length}</div>
-                             </div>
-                        </div>
-                    ))}
-                 </div>
-              </>
+                            {/* Page Footer */}
+                            <div className="absolute bottom-6 left-0 w-full px-[20mm] flex justify-between items-end border-t border-gray-100 pt-4">
+                                <div className="text-[9px] text-gray-400 uppercase tracking-widest font-bold">Confidencial • Uso Interno</div>
+                                <div className="text-[10px] text-gray-400 font-medium">Página {index + 1} de {pages.length}</div>
+                            </div>
+                    </div>
+                ))}
+              </div>
           ) : (
              <div className="w-full h-full p-6">
                  <div className="w-full h-full bg-gray-800 rounded-2xl overflow-hidden shadow-2xl relative">
@@ -406,10 +401,6 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
                         <div className="flex flex-col items-center justify-center h-full text-white/50 p-8 text-center">
                             <AlertTriangle className="w-16 h-16 mb-4 opacity-30" />
                             <h3 className="font-bold text-lg text-white">Visualização Indisponível</h3>
-                            <p className="max-w-md mt-2 text-sm opacity-70">
-                                Este é um documento de exemplo gerado pelo sistema. <br/>
-                                Faça o upload de um arquivo real (PDF) para ver o visualizador nativo funcionando.
-                            </p>
                         </div>
                     )}
                  </div>
@@ -417,90 +408,161 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
           )}
         </div>
 
-        {/* Right: Risk Cards Sidebar & Action Panel */}
-        <div className="w-full lg:w-[400px] shrink-0 flex flex-col overflow-hidden bg-white rounded-3xl shadow-soft border border-gray-100">
+        {/* Right: Sidebar - Logic Update for Maximized Action Panel */}
+        <div className="w-full lg:w-[400px] shrink-0 flex flex-col overflow-hidden bg-white rounded-3xl shadow-soft border border-gray-100 relative">
             
-            {/* 1. Risk Cards List (Upper Part) */}
-            <div className={`flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3 bg-gray-50/30 ${selectedHighlightId ? 'h-[40%] border-b border-gray-100' : 'h-[50%] border-b border-gray-200'}`}>
-                <div className="px-1 pb-2 flex justify-between items-center">
-                    <h3 className="text-xs font-bold text-secondary uppercase tracking-wider">Riscos Identificados</h3>
-                    <span className="bg-gray-200 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                        {document.highlights.length}
-                    </span>
+            {/* LIST SECTION - Visible if panel is NOT expanded or NO highlight selected */}
+            <div className={`flex flex-col transition-all duration-300 ease-in-out ${
+                (isPanelExpanded && selectedHighlightId) ? 'h-14 overflow-hidden border-b-0' : 'h-full'
+            }`}>
+                
+                {/* List Header with Tabs */}
+                <div 
+                    className={`shrink-0 p-4 border-b border-gray-100 bg-white z-10 flex flex-col gap-3 transition-all cursor-pointer ${
+                        (isPanelExpanded && selectedHighlightId) ? 'hover:bg-gray-50' : ''
+                    }`}
+                    onClick={() => {
+                        // Allow clicking header to re-open list if minimized
+                        if (isPanelExpanded && selectedHighlightId) {
+                            setIsPanelExpanded(false);
+                        }
+                    }}
+                >
+                     <div className="flex justify-between items-center">
+                        <h3 className="text-xs font-bold text-secondary uppercase tracking-wider flex items-center gap-2">
+                             {isPanelExpanded && selectedHighlightId ? (
+                                <>
+                                    <ChevronDown className="w-4 h-4" />
+                                    Expandir Lista
+                                </>
+                             ) : (
+                                "Riscos Identificados"
+                             )}
+                        </h3>
+                        <span className="bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            {filteredHighlights.length}
+                        </span>
+                    </div>
+
+                    {/* Filter Tabs - Only show when list is fully open */}
+                    {!(isPanelExpanded && selectedHighlightId) && (
+                        <div className="flex p-1 bg-gray-50 rounded-lg">
+                            {[
+                                { id: 'ALL', label: 'Todos' },
+                                { id: RiskLevel.HIGH, label: 'Alto' },
+                                { id: RiskLevel.MEDIUM, label: 'Médio' },
+                                { id: RiskLevel.LOW, label: 'Baixo' }
+                            ].map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    onClick={(e) => { e.stopPropagation(); setRiskFilter(tab.id as any); }}
+                                    className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all ${
+                                        riskFilter === tab.id 
+                                        ? 'bg-white text-dark shadow-sm' 
+                                        : 'text-secondary hover:text-dark'
+                                    }`}
+                                >
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
-                {document.highlights.length === 0 && (
-                     <div className="p-8 text-center text-secondary">
-                        <Bot className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                        <p className="text-sm">Nenhum risco detectado.</p>
-                     </div>
-                )}
+                {/* The List Content */}
+                <div className={`overflow-y-auto custom-scrollbar p-3 space-y-3 bg-gray-50/30 flex-1 transition-opacity duration-200 ${
+                    (isPanelExpanded && selectedHighlightId) ? 'opacity-0' : 'opacity-100'
+                }`}>
+                     {filteredHighlights.length === 0 && (
+                         <div className="p-8 text-center text-secondary">
+                            <Bot className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                            <p className="text-sm">Nenhum risco encontrado para este filtro.</p>
+                         </div>
+                    )}
 
-                {document.highlights.map(highlight => {
-                    const isSelected = selectedHighlightId === highlight.id;
-                    const hasRemediation = !!highlight.remediation;
+                    {filteredHighlights.map(highlight => {
+                        const isSelected = selectedHighlightId === highlight.id;
+                        const hasRemediation = !!highlight.remediation;
 
-                    return (
-                        <div 
-                            id={`card-${highlight.id}`}
-                            key={highlight.id}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedHighlightId(highlight.id);
-                                if (viewMode !== 'DIGITAL') setViewMode('DIGITAL');
-                            }}
-                            className={`cursor-pointer p-4 rounded-xl border transition-all duration-300 relative group
-                                ${isSelected 
-                                    ? 'bg-white border-primary shadow-lg ring-1 ring-primary/10 z-10' 
-                                    : 'bg-white border-gray-100 hover:border-primary/30 hover:shadow-md'
-                                }
-                                ${hasRemediation && !isSelected ? 'opacity-60 bg-emerald-50/30 border-emerald-100' : ''}
-                            `}
-                        >
-                            <div className="flex justify-between items-start mb-2">
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide ${getRiskBadgeStyles(highlight.riskLevel)}`}>
-                                    {translateRisk(highlight.riskLevel)}
-                                </span>
+                        return (
+                            <div 
+                                id={`card-${highlight.id}`}
+                                key={highlight.id}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedHighlightId(highlight.id);
+                                    if (viewMode !== 'DIGITAL') setViewMode('DIGITAL');
+                                }}
+                                className={`cursor-pointer p-4 rounded-xl border transition-all duration-300 relative group
+                                    ${isSelected 
+                                        ? 'bg-white border-primary shadow-lg ring-1 ring-primary/10 z-10' 
+                                        : 'bg-white border-gray-100 hover:border-primary/30 hover:shadow-md'
+                                    }
+                                    ${hasRemediation && !isSelected ? 'opacity-60 bg-emerald-50/30 border-emerald-100' : ''}
+                                `}
+                            >
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide ${getRiskBadgeStyles(highlight.riskLevel)}`}>
+                                        {translateRisk(highlight.riskLevel)}
+                                    </span>
+                                    
+                                    <div className="flex items-center gap-2">
+                                        {hasRemediation && (
+                                            <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                                                <FileCheck className="w-3.5 h-3.5" />
+                                                <span>Tratado</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                                 
-                                <div className="flex items-center gap-2">
-                                    {/* Category Tag */}
-                                    {highlight.category && !hasRemediation && (
-                                        <span className="text-[10px] font-bold text-secondary/70 uppercase tracking-wider bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
-                                            {highlight.category}
-                                        </span>
-                                    )}
-
-                                    {/* Remediation Status */}
-                                    {hasRemediation && (
-                                        <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
-                                            <FileCheck className="w-3.5 h-3.5" />
-                                            <span>Tratado</span>
-                                        </div>
-                                    )}
+                                <p className="text-dark text-xs font-bold leading-relaxed mb-2">
+                                    {highlight.explanation}
+                                </p>
+                                
+                                <div className="text-[10px] text-secondary font-serif italic truncate opacity-80 border-l-2 border-gray-200 pl-2">
+                                    "{highlight.textSnippet}"
                                 </div>
                             </div>
-                            
-                            <p className="text-dark text-xs font-bold leading-relaxed mb-2">
-                                {highlight.explanation}
-                            </p>
-                            
-                            <div className="text-[10px] text-secondary font-serif italic truncate opacity-80 border-l-2 border-gray-200 pl-2">
-                                "{highlight.textSnippet}"
-                            </div>
-                        </div>
-                    );
-                })}
+                        );
+                    })}
+                </div>
             </div>
 
-            {/* 2. Action Panel OR Audit Log (Bottom Part) */}
-            <div className="flex-1 overflow-hidden flex flex-col bg-white">
-                <ActionPanel 
-                    document={document} 
-                    selectedHighlight={selectedHighlight}
-                    onSaveRemediation={handleSaveRemediation}
-                    onGlobalAction={handleGlobalAction}
-                    onClose={() => setSelectedHighlightId(null)}
-                />
+            {/* ACTION PANEL SECTION - Takes full height when Expanded */}
+            <div className={`absolute bottom-0 left-0 w-full bg-white transition-all duration-300 ease-in-out shadow-[0_-5px_20px_rgba(0,0,0,0.05)] border-t border-gray-100 z-20 flex flex-col ${
+                (isPanelExpanded && selectedHighlightId) ? 'h-[calc(100%-56px)] rounded-t-2xl' : selectedHighlightId ? 'h-14 overflow-hidden cursor-pointer hover:bg-gray-50' : 'h-0 opacity-0 pointer-events-none'
+            }`}>
+                 {/* Minimized State Header (Only visible if minimized but selected) */}
+                 {!isPanelExpanded && selectedHighlightId && (
+                     <div 
+                        className="flex items-center justify-between p-4 h-full"
+                        onClick={() => setIsPanelExpanded(true)}
+                     >
+                         <p className="text-xs font-bold text-primary flex items-center gap-2">
+                             <ChevronUp className="w-4 h-4" />
+                             Continuar Edição
+                         </p>
+                         <span className="text-[10px] text-secondary font-medium">1 Ação Selecionada</span>
+                     </div>
+                 )}
+
+                 {/* Full Action Panel */}
+                 <div className={`flex-1 flex flex-col h-full ${!isPanelExpanded ? 'hidden' : ''}`}>
+                    <ActionPanel 
+                        document={document} 
+                        selectedHighlight={selectedHighlight}
+                        onSaveRemediation={handleSaveRemediation}
+                        onGlobalAction={handleGlobalAction}
+                        // Close unselects everything
+                        onClose={() => {
+                            setSelectedHighlightId(null);
+                            setIsPanelExpanded(false);
+                        }}
+                        // Minimize just hides panel but keeps selection
+                        onToggleMinimize={() => setIsPanelExpanded(false)}
+                    />
+                 </div>
             </div>
         </div>
       </div>

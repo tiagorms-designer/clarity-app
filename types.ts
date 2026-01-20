@@ -8,9 +8,11 @@ export enum RiskLevel {
 
 export enum DocStatus {
   PROCESSING = 'PROCESSING',
-  RISK_WARNING = 'RISK_WARNING', // Documents with High/Medium risk needing review
-  COMPLIANT = 'COMPLIANT',     // Documents with Low/Neutral risk (safe)
-  APPROVED = 'APPROVED'        // Manually validated by human
+  INBOX = 'INBOX',             // Novo: Documento recebido, não aberto
+  IN_ANALYSIS = 'IN_ANALYSIS', // Novo: Aberto/Visualizado pelo usuário
+  IN_PLANNING = 'IN_PLANNING', // Novo: Usuário começou a criar planos de ação
+  COMPLIANT = 'COMPLIANT',     // Baixo risco automático (Seguro)
+  APPROVED = 'APPROVED'        // Validado manualmente
 }
 
 export interface RemediationPlan {

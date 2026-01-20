@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { 
   AlertOctagon, 
   CheckCircle2, 
@@ -30,52 +30,83 @@ export const Dashboard: React.FC<DashboardProps> = ({ documents, onSelectDocumen
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('MONTH');
   const [isChartMenuOpen, setIsChartMenuOpen] = useState(false);
   
-  // New Logic for KPIs
+  // KPIs calculation based on REAL data passed via props
   const totalDocs = documents.length;
-  const actionRequiredDocs = documents.filter(d => d.status === DocStatus.RISK_WARNING);
-  const compliantDocs = documents.filter(d => d.status === DocStatus.COMPLIANT);
-  const approvedDocs = documents.filter(d => d.status === DocStatus.APPROVED);
+  const inboxDocs = documents.filter(d => d.status === DocStatus.INBOX);
+  const planningDocs = documents.filter(d => d.status === DocStatus.IN_PLANNING);
+  const approvedDocs = documents.filter(d => d.status === DocStatus.APPROVED || d.status === DocStatus.COMPLIANT);
   
   // Sort for recent list
   const sortedDocs = [...documents]
     .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
 
-  // Mock Data Generators based on Period
-  const getChartData = () => {
-      switch (chartPeriod) {
-          case 'WEEK':
-              return [
-                  { name: 'Seg', count: 4 },
-                  { name: 'Ter', count: 7 },
-                  { name: 'Qua', count: 5 },
-                  { name: 'Qui', count: 11 },
-                  { name: 'Sex', count: 9 },
-                  { name: 'Sáb', count: 2 },
-                  { name: 'Dom', count: 0 },
-              ];
-          case 'YEAR':
-              return [
-                  { name: '2019', count: 120 },
-                  { name: '2020', count: 350 },
-                  { name: '2021', count: 410 },
-                  { name: '2022', count: 580 },
-                  { name: '2023', count: totalDocs + 80, active: true },
-              ];
-          case 'MONTH':
-          default:
-              return [
-                  { name: 'Jan', count: 12 },
-                  { name: 'Fev', count: 19 },
-                  { name: 'Mar', count: 15 },
-                  { name: 'Abr', count: 22 },
-                  { name: 'Mai', count: 28 },
-                  { name: 'Jun', count: totalDocs + 5, active: true },
-                  { name: 'Jul', count: 0 },
-              ];
-      }
-  };
+  // Dynamic Chart Data Generator - Uses ACTUAL documents
+  const chartData = useMemo(() => {
+    const now = new Date();
+    
+    if (chartPeriod === 'WEEK') {
+        // Last 7 days logic
+        const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const data = [];
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date(now);
+            d.setDate(now.getDate() - i);
+            const dayName = days[d.getDay()];
+            
+            // Count docs for this specific day
+            const count = documents.filter(doc => {
+                const docDate = new Date(doc.receivedAt);
+                return docDate.getDate() === d.getDate() && 
+                       docDate.getMonth() === d.getMonth() && 
+                       docDate.getFullYear() === d.getFullYear();
+            }).length;
 
-  const chartData = getChartData();
+            data.push({ 
+                name: dayName, 
+                count, 
+                active: i === 0 // Highlight today
+            });
+        }
+        return data;
+
+    } else if (chartPeriod === 'YEAR') {
+        // Last 5 years logic
+        const currentYear = now.getFullYear();
+        const data = [];
+        for (let i = 4; i >= 0; i--) {
+            const year = currentYear - i;
+            const count = documents.filter(doc => {
+                return new Date(doc.receivedAt).getFullYear() === year;
+            }).length;
+            
+            data.push({ 
+                name: year.toString(), 
+                count, 
+                active: year === currentYear 
+            });
+        }
+        return data;
+
+    } else {
+        // MONTH (Default) - Current Year Jan-Dec
+        const currentYear = now.getFullYear();
+        const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+        
+        const data = months.map((m, index) => {
+            const count = documents.filter(doc => {
+                const d = new Date(doc.receivedAt);
+                return d.getMonth() === index && d.getFullYear() === currentYear;
+            }).length;
+
+            return { 
+                name: m, 
+                count, 
+                active: index === now.getMonth() 
+            };
+        });
+        return data;
+    }
+  }, [documents, chartPeriod]);
 
   const handleQuickUploadClick = () => {
     fileInputRef.current?.click();
@@ -84,7 +115,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ documents, onSelectDocumen
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
         onFileSelect(e.target.files[0]);
-        // Reset input value to allow selecting the same file again if needed
         e.target.value = '';
     }
   };
@@ -103,6 +133,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ documents, onSelectDocumen
       </div>
     </div>
   );
+
+  const getChartTitle = () => {
+      switch(chartPeriod) {
+          case 'WEEK': return 'Últimos 7 Dias';
+          case 'YEAR': return 'Visão Anual';
+          default: return `Ano de ${new Date().getFullYear()}`;
+      }
+  };
 
   return (
     <div className="p-6 md:p-8 w-full min-h-full flex flex-col gap-8">
@@ -139,33 +177,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ documents, onSelectDocumen
         </div>
       </header>
 
-      {/* KPI CARDS - UPDATED REFERENCES */}
+      {/* KPI CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
             label="Total Analisado" 
             value={totalDocs} 
             icon={BarChart3} 
             colorClass="bg-indigo-50 text-primary"
-            subText="+12%"
+            subText={totalDocs > 0 ? "100%" : "0%"}
         />
         <StatCard 
-            label="Atenção Requerida" 
-            value={actionRequiredDocs.length} 
+            label="Caixa de Entrada" 
+            value={inboxDocs.length} 
             icon={AlertOctagon} 
-            colorClass="bg-red-50 text-risk-high" 
+            colorClass="bg-blue-50 text-blue-600" 
         />
         <StatCard 
-            label="Em Conformidade" 
-            value={compliantDocs.length} 
+            label="Em Plano de Ação" 
+            value={planningDocs.length} 
             icon={ShieldCheck} 
-            colorClass="bg-blue-50 text-blue-500" 
+            colorClass="bg-orange-50 text-orange-600" 
         />
         <StatCard 
-            label="Aprovados" 
+            label="Finalizados" 
             value={approvedDocs.length} 
             icon={CheckCircle2} 
             colorClass="bg-emerald-50 text-risk-low"
-            subText="Finalizados"
+            subText="Concluídos"
         />
       </div>
 
@@ -179,19 +217,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ documents, onSelectDocumen
                     <div className="flex items-center gap-2 mb-1">
                         <Calendar className="w-4 h-4 text-secondary" />
                         <span className="text-secondary text-sm font-medium">
-                            {chartPeriod === 'WEEK' ? 'Esta semana' : chartPeriod === 'MONTH' ? 'Este mês' : 'Este ano'}
+                            {getChartTitle()}
                         </span>
                     </div>
-                    <h3 className="text-dark text-2xl font-bold">Volume de Análise</h3>
+                    <h3 className="text-dark text-2xl font-bold">Volume de Documentos</h3>
                 </div>
                 
+                {/* Visual Menu with Dropdown Logic Restored */}
                 <div className="relative">
                     <button 
                         onClick={() => setIsChartMenuOpen(!isChartMenuOpen)}
                         className={`p-2 rounded-lg transition-colors flex items-center gap-2 ${isChartMenuOpen ? 'bg-indigo-50 text-primary' : 'bg-background text-secondary hover:text-primary'}`}
                     >
                         <BarChart3 className="w-5 h-5" />
-                        {isChartMenuOpen && <ChevronDown className="w-3 h-3" />}
+                        {isChartMenuOpen ? <ArrowUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                     </button>
 
                     {isChartMenuOpen && (
@@ -243,7 +282,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ documents, onSelectDocumen
             </div>
         </div>
 
-        {/* Promo / Action Card - UPDATED FOR QUICK UPLOAD CONTEXT */}
+        {/* Promo / Action Card */}
         <div className="bg-primary rounded-3xl p-8 text-white relative overflow-hidden flex flex-col justify-center shadow-soft">
             <div className="absolute top-0 right-0 w-48 h-48 bg-white opacity-10 rounded-full translate-x-10 -translate-y-10"></div>
             <div className="absolute bottom-0 left-0 w-32 h-32 bg-white opacity-10 rounded-full -translate-x-10 translate-y-10"></div>
@@ -303,15 +342,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ documents, onSelectDocumen
                                 <div className="flex items-center gap-2">
                                     {doc.status === DocStatus.APPROVED ? (
                                         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                            <span className="font-bold text-xs">Aprovado</span>
+                                            <span className="font-bold text-xs">Finalizado</span>
                                         </div>
                                     ) : doc.status === DocStatus.COMPLIANT ? (
-                                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-                                            <span className="font-bold text-xs">Conforme</span>
+                                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                            <span className="font-bold text-xs">Finalizado</span>
+                                        </div>
+                                    ) : doc.status === DocStatus.IN_PLANNING ? (
+                                         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-100">
+                                            <span className="font-bold text-xs">Em Plano de Ação</span>
+                                        </div>
+                                    ) : doc.status === DocStatus.IN_ANALYSIS ? (
+                                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                            <span className="font-bold text-xs">Em Análise</span>
                                         </div>
                                     ) : (
-                                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-100">
-                                            <span className="font-bold text-xs">Atenção</span>
+                                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                                            <span className="font-bold text-xs">Caixa de Entrada</span>
                                         </div>
                                     )}
                                 </div>
