@@ -2,7 +2,9 @@ import React from 'react';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 
 export const ApiKeyModal = () => {
-    if (process.env.API_KEY) return null;
+    // Prefer VITE_GEMINI_API_KEY if available, otherwise fall back to API_KEY injected via define
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.API_KEY;
+    if (apiKey) return null;
 
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -16,11 +18,11 @@ export const ApiKeyModal = () => {
                 </p>
                 
                 <div className="bg-slate-50 p-4 rounded-lg text-xs text-slate-600 mb-6 font-mono break-all border border-slate-100">
-                    process.env.API_KEY está ausente.
+                    API_KEY está ausente no ambiente.
                 </div>
 
                 <p className="text-xs text-center text-slate-400 mb-4">
-                   Este aplicativo requer que a chave da API seja injetada via variáveis de ambiente por segurança.
+                   Configure a variável de ambiente API_KEY na Vercel ou no arquivo .env.
                 </p>
             </div>
         </div>
