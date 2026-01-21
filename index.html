@@ -7,11 +7,11 @@
     <link rel="icon" type="image/svg+xml" href="https://raw.githubusercontent.com/tiagorms-designer/clarity-assets/refs/heads/main/public/brand/logo.svg" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Configuração de Variáveis de Ambiente para Deploy (Polyfill)
-      // Garante que a chave da API esteja acessível via process.env.API_KEY mesmo no navegador
+      // Configuração de Variáveis de Ambiente
+      // Mantenha API_KEY vazia aqui para usar a do servidor/EasyPanel
       window.process = {
         env: {
-          API_KEY: "AIzaSyCakwlb0dlcU8xyLmaJsWMHSPW3JyRQWTY"
+          API_KEY: "" 
         }
       };
 
@@ -24,20 +24,16 @@
               input: "var(--input)",
               ring: "var(--ring)",
               background: "var(--background)",
-              surface: "var(--card)", // Maps surface to card background
-              
-              // Semantic Colors Mapped to New Theme
+              surface: "var(--card)", 
               primary: {
                 DEFAULT: "var(--primary)",
                 foreground: "var(--primary-foreground)",
               },
-              // Existing app uses 'secondary' for gray text, so we map it to muted-foreground
               secondary: {
                 DEFAULT: "var(--muted-foreground)", 
                 foreground: "var(--secondary-foreground)",
               },
-              dark: "var(--foreground)", // Maps 'text-dark' to the main foreground color
-              
+              dark: "var(--foreground)",
               muted: {
                 DEFAULT: "var(--muted)",
                 foreground: "var(--muted-foreground)",
@@ -58,13 +54,11 @@
                 DEFAULT: "var(--destructive)",
                 foreground: "var(--destructive-foreground)",
               },
-              
-              // Legacy Risk Colors (Preserved or Tweaked if needed)
               risk: {
-                high: '#ef4444', // Matches --destructive
+                high: '#ef4444', 
                 medium: '#FFB547', 
-                low: '#10b981', // Emerald-500 equivalent
-                neutral: '#8a95ae' // Matches muted-foreground
+                low: '#10b981', 
+                neutral: '#8a95ae' 
               }
             },
             fontFamily: {
@@ -79,7 +73,7 @@
               '3xl': '1.5rem', 
             },
             boxShadow: {
-              'soft': 'var(--shadow-md)', // Remapped to the new shadow system
+              'soft': 'var(--shadow-md)',
               'sm': 'var(--shadow-sm)',
               'md': 'var(--shadow-md)',
               'lg': 'var(--shadow-lg)',
@@ -104,91 +98,79 @@
         --secondary-foreground: #29325d;
         --muted: #f2f5fa;
         --muted-foreground: #8a95ae;
-        --accent: #e0dbfb;
-        --accent-foreground: #6f52ed;
+        --accent: #f2f5fa;
+        --accent-foreground: #29325d;
         --destructive: #ef4444;
         --destructive-foreground: #ffffff;
-        --border: #e8ebf3;
-        --input: #f2f5fa;
+        --border: #e2e8f0;
+        --input: #e2e8f0;
         --ring: #6f52ed;
         --radius: 0.75rem;
-        
-        /* Shadows */
-        --shadow-sm: 0px 1px 2px 0px rgba(111, 82, 237, 0.05);
-        --shadow-md: 0px 4px 12px 0px rgba(111, 82, 237, 0.08); /* Soft violet tint shadow */
-        --shadow-lg: 0px 8px 24px 0px rgba(111, 82, 237, 0.12);
-        --shadow-xl: 0px 20px 32px 0px rgba(111, 82, 237, 0.15);
+        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.02), 0 2px 4px -2px rgb(0 0 0 / 0.02);
+        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+        --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.05), 0 8px 10px -6px rgb(0 0 0 / 0.01);
       }
-
       .dark {
-        --background: #1f253c;
-        --foreground: #e6e8ef;
-        --card: #29325d;
-        --card-foreground: #e6e8ef;
-        --popover: #1f253c;
-        --popover-foreground: #e6e8ef;
-        --primary: #6f52ed;
-        --primary-foreground: #ffffff;
-        --secondary: #3e4a78;
-        --secondary-foreground: #e6e8ef;
-        --muted: #343e63;
-        --muted-foreground: #a0a8bf;
-        --accent: #3e4a78;
-        --accent-foreground: #e6e8ef;
-        --destructive: #ef4444;
-        --destructive-foreground: #ffffff;
-        --border: #4a557a;
-        --input: #3e4a78;
-        --ring: #6f52ed;
-        
-        --shadow-sm: 0px 1px 2px 0px rgba(0, 0, 0, 0.3);
-        --shadow-md: 0px 4px 6px -1px rgba(0, 0, 0, 0.3);
-        --shadow-lg: 0px 10px 15px -3px rgba(0, 0, 0, 0.3);
-        --shadow-xl: 0px 20px 25px -5px rgba(0, 0, 0, 0.3);
+        --background: #0f172a;
+        --foreground: #f8fafc;
+        --card: #1e293b;
+        --card-foreground: #f8fafc;
+        --popover: #1e293b;
+        --popover-foreground: #f8fafc;
+        --primary: #818cf8;
+        --primary-foreground: #0f172a;
+        --secondary: #334155;
+        --secondary-foreground: #f8fafc;
+        --muted: #1e293b;
+        --muted-foreground: #94a3b8;
+        --accent: #1e293b;
+        --accent-foreground: #f8fafc;
+        --destructive: #7f1d1d;
+        --destructive-foreground: #f8fafc;
+        --border: #1e293b;
+        --input: #1e293b;
+        --ring: #818cf8;
       }
-
       body {
         font-family: 'DM Sans', sans-serif;
         background-color: var(--background);
         color: var(--foreground);
-        -webkit-font-smoothing: antialiased;
       }
-      
-      /* Custom scrollbar matched to theme */
-      ::-webkit-scrollbar {
+      .custom-scrollbar::-webkit-scrollbar {
         width: 6px;
         height: 6px;
       }
-      ::-webkit-scrollbar-track {
+      .custom-scrollbar::-webkit-scrollbar-track {
         background: transparent;
       }
-      ::-webkit-scrollbar-thumb {
-        background: var(--muted-foreground);
-        border-radius: 3px;
-        opacity: 0.5;
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 10px;
       }
-      ::-webkit-scrollbar-thumb:hover {
-        background: var(--primary);
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
       }
     </style>
   <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.37.0",
+    "react": "https://esm.sh/react@^19.2.3",
+    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
     "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
     "recharts": "https://esm.sh/recharts@^3.6.0",
-    "pdfjs-dist": "https://esm.sh/pdfjs-dist@3.11.174",
-    "mammoth": "https://esm.sh/mammoth@1.6.0",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
-    "vite": "https://esm.sh/vite@^7.3.1"
+    "mammoth": "https://esm.sh/mammoth@^1.11.0",
+    "pdfjs-dist": "https://esm.sh/pdfjs-dist@^5.4.530"
   }
 }
 </script>
 </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

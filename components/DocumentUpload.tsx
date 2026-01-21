@@ -7,10 +7,6 @@ import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
 import * as mammothLib from 'mammoth';
 
-// Força o uso da versão correta do worker via CDN para evitar problemas de build/deploy
-// Usando unpkg que costuma ser mais permissivo com CORS e Headers
-const PDF_WORKER_URL = "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
-
 interface DocumentUploadProps {
   onUploadComplete: (doc: Document) => void;
   initialFile?: File | null;
@@ -26,12 +22,23 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
   const processedFileRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper function to get correct worker URL based on version
+  const getWorkerConfig = (version: string) => {
+    const majorVersion = parseInt(version.split('.')[0]);
+    // PDF.js v4+ uses .mjs for the minified worker in build folder
+    const ext = majorVersion >= 4 ? 'min.mjs' : 'min.js';
+    return `https://unpkg.com/pdfjs-dist@${version}/build/pdf.worker.${ext}`;
+  };
+
   // Configuração Global do Worker (Executada uma vez)
   useEffect(() => {
     try {
         const pdfjs = (pdfjsLib as any).default || pdfjsLib;
+        const version = pdfjs.version || '3.11.174';
+        
         if (pdfjs && !pdfjs.GlobalWorkerOptions.workerSrc) {
-            pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
+            pdfjs.GlobalWorkerOptions.workerSrc = getWorkerConfig(version);
+            console.log(`PDF Worker configured for version ${version}`);
         }
     } catch (e) {
         console.warn("Falha ao configurar PDF Worker globalmente:", e);
@@ -41,10 +48,11 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
   const readPdfContent = async (file: File): Promise<string> => {
     try {
         const pdfjs = (pdfjsLib as any).default || pdfjsLib;
+        const version = pdfjs.version || '3.11.174';
         
         // Reforça configuração do worker antes de ler
         if (pdfjs.GlobalWorkerOptions && !pdfjs.GlobalWorkerOptions.workerSrc) {
-            pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
+            pdfjs.GlobalWorkerOptions.workerSrc = getWorkerConfig(version);
         }
 
         const arrayBuffer = await file.arrayBuffer();
@@ -52,7 +60,7 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
         // Tenta carregar o documento
         const loadingTask = pdfjs.getDocument({ 
             data: new Uint8Array(arrayBuffer),
-            cMapUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
+            cMapUrl: `https://unpkg.com/pdfjs-dist@${version}/cmaps/`,
             cMapPacked: true,
         });
 
@@ -85,6 +93,8 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
         console.error("Erro Crítico PDF:", e);
         if (e.name === 'PasswordException') throw new Error("O arquivo PDF está protegido por senha.");
         if (e.message.includes("imagem digitalizada")) throw e;
+        if (e.message.includes("Worker")) throw new Error("Erro de compatibilidade do navegador com o leitor de PDF.");
+        
         throw new Error("Falha técnica ao ler PDF. Tente converter para Word ou TXT.");
     }
   };

@@ -1,22 +1,29 @@
 import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold, Schema } from "@google/genai";
 import { Highlight, RiskLevel } from "../types";
 
-const GEMINI_MODEL = "gemini-2.0-flash"; // Modelo estável e rápido para JSON estruturado
+// MUDANÇA CRÍTICA: Usando modelo estável (1.5 Flash) em vez de preview/2.0 para evitar erro 400 e instabilidade
+const GEMINI_MODEL = "gemini-1.5-flash"; 
 
-// Helper para obter a chave de API de forma robusta
+// Helper para obter a chave de API de todas as fontes possíveis
 const getApiKey = (): string | undefined => {
   let key: string | undefined;
   try {
-    // Prioridade 1: Runtime injection (index.html polyfill)
-    if (typeof window !== 'undefined' && (window as any).process?.env?.API_KEY) {
+    // 1. Variáveis de ambiente do Vite (Padrão moderno)
+    // @ts-ignore
+    if (import.meta.env && import.meta.env.VITE_API_KEY) {
+        // @ts-ignore
+        key = import.meta.env.VITE_API_KEY;
+    }
+    // 2. Runtime injection (index.html window.process)
+    else if (typeof window !== 'undefined' && (window as any).process?.env?.API_KEY) {
         key = (window as any).process.env.API_KEY;
     } 
-    // Prioridade 2: Build time env vars
+    // 3. Process env padrão (Node/Build time)
     else {
         key = process.env.API_KEY;
     }
   } catch (e) {
-    console.warn("Erro ao acessar variáveis de ambiente:", e);
+    console.warn("Erro ao ler variáveis de ambiente:", e);
   }
   return key;
 }
@@ -27,52 +34,30 @@ export const analyzeDocumentWithGemini = async (
   
   const apiKey = getApiKey();
 
-  if (!apiKey || apiKey === "INSIRA_SUA_NOVA_CHAVE_AQUI") {
-    console.error("API Key missing or default");
-    throw new Error("Chave de API inválida. Edite o arquivo index.html e insira sua nova chave do Google AI Studio.");
+  // Validação explícita da chave
+  if (!apiKey || apiKey.trim() === "" || apiKey.includes("INSIRA")) {
+    console.error("API Key missing or invalid");
+    throw new Error("Chave de API não encontrada. Configure a variável VITE_API_KEY ou edite o index.html.");
   }
 
   const ai = new GoogleGenAI({ apiKey: apiKey });
 
-  // Definição do Schema de Resposta (Tipagem Forte)
+  // Schema simplificado para garantir compatibilidade com 1.5 Flash
   const responseSchema: Schema = {
     type: Type.OBJECT,
     properties: {
-      sender: {
-        type: Type.STRING,
-        description: "O departamento interno, empresa externa ou área responsável pelo documento (ex: Jurídico, RH, Financeiro)."
-      },
-      summary: {
-        type: Type.STRING,
-        description: "Resumo executivo profissional (1 parágrafo) focado na tomada de decisão."
-      },
-      overallRisk: {
-        type: Type.STRING,
-        enum: ["HIGH", "MEDIUM", "LOW", "NEUTRAL"],
-        description: "Nível de risco agregado do documento."
-      },
+      sender: { type: Type.STRING, description: "Emissor do documento" },
+      summary: { type: Type.STRING, description: "Resumo executivo" },
+      overallRisk: { type: Type.STRING, enum: ["HIGH", "MEDIUM", "LOW", "NEUTRAL"] },
       highlights: {
         type: Type.ARRAY,
-        description: "Lista de pontos de risco identificados no texto.",
         items: {
           type: Type.OBJECT,
           properties: {
-            textSnippet: {
-              type: Type.STRING,
-              description: "CÓPIA EXATA e LITERAL do trecho do texto original que contém o risco."
-            },
-            explanation: {
-              type: Type.STRING,
-              description: "Explicação do impacto (máx 20 palavras)."
-            },
-            riskLevel: {
-              type: Type.STRING,
-              enum: ["HIGH", "MEDIUM", "LOW", "NEUTRAL"]
-            },
-            category: {
-              type: Type.STRING,
-              description: "Categoria (ex: Jurídico, Financeiro, Compliance, SLA, Segurança)."
-            }
+            textSnippet: { type: Type.STRING },
+            explanation: { type: Type.STRING },
+            riskLevel: { type: Type.STRING, enum: ["HIGH", "MEDIUM", "LOW", "NEUTRAL"] },
+            category: { type: Type.STRING }
           },
           required: ["textSnippet", "explanation", "riskLevel", "category"]
         }
@@ -87,23 +72,15 @@ export const analyzeDocumentWithGemini = async (
       contents: [
         {
             role: 'user',
-            parts: [{ text: `Analise este documento:\n\n${text}` }]
+            parts: [{ text: `Analise o seguinte documento e extraia riscos:\n\n${text}` }]
         }
       ],
       config: {
-        systemInstruction: `
-          Você é a Clarity AI, uma especialista em análise de riscos contratuais e operacionais.
-          
-          INSTRUÇÕES CRÍTICAS:
-          1. Identifique quem é o EMISSOR ou DEPARTAMENTO responsável.
-          2. O campo 'textSnippet' DEVE SER UMA CÓPIA EXATA, caractere por caractere, de um trecho encontrado no texto original.
-          3. NÃO resuma, NÃO reformule e NÃO corrija o 'textSnippet'.
-          4. Selecione apenas os trechos mais críticos que evidenciam o risco.
-        `,
+        systemInstruction: `Você é a Clarity AI. Analise contratos e documentos operacionais. 
+        Saída estritamente em JSON.
+        Se o texto for ilegível ou muito curto, retorne overallRisk: NEUTRAL.`,
         safetySettings: [
             { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
             { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
         ],
         responseMimeType: "application/json",
@@ -111,58 +88,45 @@ export const analyzeDocumentWithGemini = async (
       }
     });
 
+    // Tratamento robusto do JSON
     const rawText = response.text || "{}";
-    let jsonString = rawText;
-    
-    // Robust extraction of JSON object if model adds markdown blocks
-    const firstOpen = rawText.indexOf('{');
-    const lastClose = rawText.lastIndexOf('}');
-
-    if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
-        jsonString = rawText.substring(firstOpen, lastClose + 1);
-    }
-
     let result;
+    
     try {
-        result = JSON.parse(jsonString);
-    } catch (parseError) {
-        console.error("JSON Parse Error:", parseError, "Raw Text:", rawText);
-        throw new Error("A IA retornou um formato inválido. Tente novamente.");
+        result = JSON.parse(rawText);
+    } catch (e) {
+        // Fallback: Tentar limpar markdown se o modelo ignorar o MIME type
+        const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        result = JSON.parse(cleanJson);
     }
     
+    // Adiciona IDs únicos aos destaques
     const highlightsWithIds = (result.highlights || []).map((h: any, index: number) => ({
       ...h,
       id: `gen-h-${Date.now()}-${index}`
     }));
 
     return {
-      sender: result.sender || "Upload Externo",
-      summary: result.summary || "Análise concluída.",
+      sender: result.sender || "Desconhecido",
+      summary: result.summary || "Sem resumo disponível.",
       overallRisk: (result.overallRisk as RiskLevel) || RiskLevel.NEUTRAL,
       highlights: highlightsWithIds
     };
 
   } catch (error: any) {
-    console.error("Gemini analysis failed details:", error);
+    console.error("Gemini Error:", error);
     
-    let userMessage = "Falha na comunicação com a IA Clarity.";
-    const errorMsg = error.message || "";
-
-    if (errorMsg.includes("leaked") || (errorMsg.includes("403") && errorMsg.includes("key"))) {
-        userMessage = "CHAVE BLOQUEADA: A chave atual vazou. Gere uma nova e atualize o index.html.";
-    } else if (errorMsg.includes("403")) {
-        userMessage = "Erro 403: Acesso Negado. Verifique se a chave de API é válida e tem permissões.";
-    } else if (errorMsg.includes("400")) {
-         userMessage = "Erro 400: O documento pode conter caracteres inválidos ou o formato da requisição foi rejeitado.";
-    } else if (errorMsg.includes("429")) {
-        userMessage = "Erro 429: Cota de API excedida. Aguarde um momento.";
-    } else if (errorMsg.includes("fetch failed")) {
-         userMessage = "Erro de Conexão: Verifique sua internet ou bloqueadores de anúncio.";
-    } else {
-         userMessage = `Erro: ${errorMsg}`;
+    const msg = error.message || "";
+    
+    if (msg.includes("400") && msg.includes("API key")) {
+        throw new Error("Sua Chave de API expirou ou é inválida. Gere uma nova no Google AI Studio.");
+    } else if (msg.includes("400")) {
+        throw new Error("Erro 400: O documento é complexo demais ou o modelo está instável. Tente novamente.");
+    } else if (msg.includes("429")) {
+        throw new Error("Muitas requisições. Aguarde um minuto.");
     }
     
-    throw new Error(userMessage);
+    throw new Error("Erro na análise de IA. Verifique sua conexão e chave de API.");
   }
 };
 
@@ -172,37 +136,20 @@ export const getRemediationSuggestion = async (
     category: string
 ): Promise<string> => {
     const apiKey = getApiKey();
-
-    if (!apiKey) return "Erro: Chave de API não configurada.";
+    if (!apiKey) return "Erro de configuração de API.";
 
     const ai = new GoogleGenAI({ apiKey: apiKey });
     
     try {
         const response = await ai.models.generateContent({
             model: GEMINI_MODEL,
-            contents: [
-                {
-                    role: 'user',
-                    parts: [{ text: `
-                        Contexto do Risco:
-                        - Trecho: "${riskSnippet}"
-                        - Impacto: "${riskExplanation}"
-                        - Categoria: "${category}"
-
-                        Tarefa:
-                        Gere um plano de ação técnico detalhado, direto e acionável para mitigar este risco.
-                        O texto deve ser instrutivo, para a pessoa responsável resolver o problema.
-                        Use tom profissional e imperativo. Máximo de 3 parágrafos curtos.
-                    `}]
-                }
-            ],
-            config: {
-                systemInstruction: "Atue como a Clarity, uma IA especialista em gestão de riscos operacionais e jurídicos."
-            }
+            contents: [{
+                role: 'user',
+                parts: [{ text: `Gere um plano de ação curto para mitigar este risco: "${riskExplanation}" (Categoria: ${category}).` }]
+            }]
         });
-        return response.text || "Não foi possível gerar sugestão.";
+        return response.text || "Sem sugestão.";
     } catch (e) {
-        console.error(e);
-        return "Erro ao consultar a IA.";
+        return "Não foi possível gerar sugestão no momento.";
     }
 };
