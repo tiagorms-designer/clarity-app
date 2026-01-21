@@ -10,7 +10,7 @@ interface DocumentViewerProps {
 }
 
 // Configuration for virtual pagination
-const CHARS_PER_PAGE = 1800; // Approximate characters per page for splitting
+const CHARS_PER_PAGE = 2500; // Increased to reduce unnecessary splitting on large monitors
 
 export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack, onUpdateDocument }) => {
   const [selectedHighlightId, setSelectedHighlightId] = useState<string | null>(null);
@@ -100,6 +100,37 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
       if (!document || !document.content) return [{ text: '', startIndex: 0 }];
       
       const content = document.content;
+
+      // 1. Detect Explicit Page Markers (from PDF Upload)
+      // Matches "--- Página X ---"
+      const pageMarkerRegex = /--- Página \d+ ---\n?/g;
+      
+      if (content.match(pageMarkerRegex)) {
+          const pagesArr: { text: string, startIndex: number }[] = [];
+          let match;
+          
+          // Use regex loop to find all markers
+          while ((match = pageMarkerRegex.exec(content)) !== null) {
+              const startOfPageContent = match.index + match[0].length;
+              
+              // Find the start of the next marker to define the end of this page
+              const nextRegex = /--- Página \d+ ---\n?/g;
+              nextRegex.lastIndex = startOfPageContent;
+              const nextMatch = nextRegex.exec(content);
+              
+              const endOfPageContent = nextMatch ? nextMatch.index : content.length;
+              const pageText = content.substring(startOfPageContent, endOfPageContent);
+              
+              // Only add valid pages
+              if (pageText.length > 0 || pagesArr.length === 0) {
+                   pagesArr.push({ text: pageText, startIndex: startOfPageContent });
+              }
+          }
+          
+          if (pagesArr.length > 0) return pagesArr;
+      }
+      
+      // 2. Fallback: Character Count Pagination (for DOCX/TXT)
       const paragraphs = content.split('\n');
       const pagesArr: { text: string, startIndex: number }[] = [];
       
@@ -109,6 +140,11 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
       let globalIndexTracker = 0;
 
       paragraphs.forEach((para, index) => {
+          // Add extra newline to mimic split join
+          const paraWithNewline = para + '\n';
+          
+          // Check if adding this paragraph exceeds page limit
+          // BUT ensure at least one paragraph is added if it's huge
           if ((currentLength + para.length) > CHARS_PER_PAGE && currentPageText.length > 0) {
               pagesArr.push({ text: currentPageText, startIndex: currentPageStartIndex });
               currentPageText = '';
@@ -116,9 +152,9 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
               currentLength = 0;
           }
 
-          currentPageText += para + '\n';
-          currentLength += para.length + 1; 
-          globalIndexTracker += para.length + 1;
+          currentPageText += paraWithNewline;
+          currentLength += paraWithNewline.length;
+          globalIndexTracker += paraWithNewline.length;
       });
 
       if (currentPageText.length > 0) {
@@ -150,11 +186,12 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
     return lines.map((line, lineIdx) => {
       const lineStart = currentLocalIndex;
       const lineEnd = currentLocalIndex + line.length;
-      currentLocalIndex += line.length + 1; 
+      currentLocalIndex += line.length + 1; // +1 for newline
 
-      if (line.trim() === '') return <br key={lineIdx} className="mb-2" />;
+      if (line.trim() === '') return <br key={lineIdx} className="mb-4" />;
 
-      let className = "mb-4 text-gray-700 leading-7 text-[15px]"; 
+      // Improved formatting detection
+      let className = "mb-3 text-gray-700 leading-relaxed text-[15px] text-justify break-words"; 
       let cleanLine = line;
       
       if (line.startsWith('# ')) {
@@ -167,9 +204,9 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
           className = "text-lg font-semibold mt-5 mb-3 text-gray-800";
           cleanLine = line.replace('### ', '');
       } else if (line.trim().match(/^\d+\./)) {
-           className += " ml-5 pl-2 font-medium text-gray-800"; 
+           className += " ml-4 pl-2 font-medium text-gray-800"; 
       } else if (line.trim().startsWith('- ')) {
-           className = "ml-5 pl-2 list-disc list-outside mb-2 text-gray-700 leading-7 text-[15px] display-list-item";
+           className = "ml-4 pl-2 list-disc list-outside mb-2 text-gray-700 leading-7 text-[15px]";
       } else if (line.trim().startsWith('> ')) {
             className = "pl-4 border-l-4 border-gray-200 text-gray-500 italic mb-4";
             cleanLine = line.replace('> ', '');
@@ -247,9 +284,6 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
       });
 
       // WORKFLOW LOGIC:
-      // If a plan is created, and status is "In Analysis" or "Inbox", move to "In Planning"
-      // If it's already "Approved", we probably shouldn't demote it automatically without explicit "Flag" action,
-      // but for editing plans, we keep current status or move to Planning.
       let newStatus = document.status;
       if (newStatus === DocStatus.IN_ANALYSIS || newStatus === DocStatus.INBOX) {
           newStatus = DocStatus.IN_PLANNING;
@@ -286,7 +320,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
     const updatedDoc: Document = {
       ...document,
       history: [newLog, ...document.history],
-      status: action === 'VALIDATE' ? DocStatus.APPROVED : DocStatus.IN_PLANNING // If flagged, goes back to planning
+      status: action === 'VALIDATE' ? DocStatus.APPROVED : DocStatus.IN_PLANNING 
     };
     onUpdateDocument(updatedDoc);
   };
@@ -349,8 +383,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
         <div 
             className="flex-1 overflow-y-auto custom-scrollbar flex flex-col items-center bg-gray-200/50 rounded-3xl border border-gray-100/50 relative group shadow-inner py-8"
             onClick={() => {
-                // If clicking outside, we deselect IF the panel isn't in a focused editing state
-                // For now, we'll keep selection to allow toggling panel
+                // Keep panel selection logic
             }}
         >
           {viewMode === 'DIGITAL' ? (
@@ -358,22 +391,25 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
                 {pages.map((page, index) => (
                     <div key={index} className="bg-white shadow-xl shadow-gray-300/40 min-h-[297mm] p-[20mm] relative animate-in fade-in duration-500">
                             {/* Page Header */}
-                            {index === 0 && (
-                                <div className="mb-12 border-b-2 border-dark pb-6">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <h1 className="text-2xl font-bold text-gray-900 mb-2">{document.title}</h1>
-                                            <div className="text-sm text-gray-500">
-                                                Documento ID: #{document.id.slice(-6).toUpperCase()} <br/>
-                                                Gerado em: {new Date().toLocaleDateString('pt-BR')}
+                            <div className="flex justify-between items-start mb-8 border-b border-gray-100 pb-4">
+                                <div>
+                                    {index === 0 ? (
+                                        <>
+                                            <h1 className="text-2xl font-bold text-gray-900 mb-1">{document.title}</h1>
+                                            <div className="text-xs text-gray-400">
+                                                ID: #{document.id.slice(-6).toUpperCase()} • {new Date().toLocaleDateString('pt-BR')}
                                             </div>
-                                        </div>
-                                        <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                                            <FileCheck className="w-6 h-6 text-primary" />
-                                        </div>
-                                    </div>
+                                        </>
+                                    ) : (
+                                         <div className="text-xs text-gray-300 font-bold uppercase tracking-widest">
+                                            {document.title.substring(0, 30)}...
+                                         </div>
+                                    )}
                                 </div>
-                            )}
+                                <div className="text-xs font-bold text-gray-300 bg-gray-50 px-2 py-1 rounded">
+                                    Pág. {index + 1}
+                                </div>
+                            </div>
 
                             {/* Content */}
                             <div className="font-sans text-gray-800">
@@ -381,9 +417,12 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
                             </div>
 
                             {/* Page Footer */}
-                            <div className="absolute bottom-6 left-0 w-full px-[20mm] flex justify-between items-end border-t border-gray-100 pt-4">
-                                <div className="text-[9px] text-gray-400 uppercase tracking-widest font-bold">Confidencial • Uso Interno</div>
-                                <div className="text-[10px] text-gray-400 font-medium">Página {index + 1} de {pages.length}</div>
+                            <div className="absolute bottom-6 left-0 w-full px-[20mm] flex justify-between items-end border-t border-gray-100 pt-4 mt-auto">
+                                <div className="text-[9px] text-gray-400 uppercase tracking-widest font-bold flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
+                                    Clarity AI • Leitura Inteligente
+                                </div>
+                                <div className="text-[10px] text-gray-400 font-medium">{index + 1} / {pages.length}</div>
                             </div>
                     </div>
                 ))}
@@ -408,21 +447,18 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
           )}
         </div>
 
-        {/* Right: Sidebar - Logic Update for Maximized Action Panel */}
+        {/* Right: Sidebar */}
         <div className="w-full lg:w-[400px] shrink-0 flex flex-col overflow-hidden bg-white rounded-3xl shadow-soft border border-gray-100 relative">
             
-            {/* LIST SECTION - Visible if panel is NOT expanded or NO highlight selected */}
+            {/* LIST SECTION */}
             <div className={`flex flex-col transition-all duration-300 ease-in-out ${
                 (isPanelExpanded && selectedHighlightId) ? 'h-14 overflow-hidden border-b-0' : 'h-full'
             }`}>
-                
-                {/* List Header with Tabs */}
                 <div 
                     className={`shrink-0 p-4 border-b border-gray-100 bg-white z-10 flex flex-col gap-3 transition-all cursor-pointer ${
                         (isPanelExpanded && selectedHighlightId) ? 'hover:bg-gray-50' : ''
                     }`}
                     onClick={() => {
-                        // Allow clicking header to re-open list if minimized
                         if (isPanelExpanded && selectedHighlightId) {
                             setIsPanelExpanded(false);
                         }
@@ -444,7 +480,6 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
                         </span>
                     </div>
 
-                    {/* Filter Tabs - Only show when list is fully open */}
                     {!(isPanelExpanded && selectedHighlightId) && (
                         <div className="flex p-1 bg-gray-50 rounded-lg">
                             {[
@@ -469,7 +504,6 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
                     )}
                 </div>
 
-                {/* The List Content */}
                 <div className={`overflow-y-auto custom-scrollbar p-3 space-y-3 bg-gray-50/30 flex-1 transition-opacity duration-200 ${
                     (isPanelExpanded && selectedHighlightId) ? 'opacity-0' : 'opacity-100'
                 }`}>
@@ -529,11 +563,10 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
                 </div>
             </div>
 
-            {/* ACTION PANEL SECTION - Takes full height when Expanded */}
+            {/* ACTION PANEL SECTION */}
             <div className={`absolute bottom-0 left-0 w-full bg-white transition-all duration-300 ease-in-out shadow-[0_-5px_20px_rgba(0,0,0,0.05)] border-t border-gray-100 z-20 flex flex-col ${
                 (isPanelExpanded && selectedHighlightId) ? 'h-[calc(100%-56px)] rounded-t-2xl' : selectedHighlightId ? 'h-14 overflow-hidden cursor-pointer hover:bg-gray-50' : 'h-0 opacity-0 pointer-events-none'
             }`}>
-                 {/* Minimized State Header (Only visible if minimized but selected) */}
                  {!isPanelExpanded && selectedHighlightId && (
                      <div 
                         className="flex items-center justify-between p-4 h-full"
@@ -547,19 +580,16 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ document, onBack
                      </div>
                  )}
 
-                 {/* Full Action Panel */}
                  <div className={`flex-1 flex flex-col h-full ${!isPanelExpanded ? 'hidden' : ''}`}>
                     <ActionPanel 
                         document={document} 
                         selectedHighlight={selectedHighlight}
                         onSaveRemediation={handleSaveRemediation}
                         onGlobalAction={handleGlobalAction}
-                        // Close unselects everything
                         onClose={() => {
                             setSelectedHighlightId(null);
                             setIsPanelExpanded(false);
                         }}
-                        // Minimize just hides panel but keeps selection
                         onToggleMinimize={() => setIsPanelExpanded(false)}
                     />
                  </div>
