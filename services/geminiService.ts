@@ -3,18 +3,29 @@ import { Highlight, RiskLevel } from "../types";
 
 const GEMINI_MODEL = "gemini-3-flash-preview";
 
+// Helper para obter a chave de API de forma robusta
+const getApiKey = (): string | undefined => {
+  let key: string | undefined;
+  try {
+    // Prioridade 1: Runtime injection (index.html polyfill)
+    if (typeof window !== 'undefined' && (window as any).process?.env?.API_KEY) {
+        key = (window as any).process.env.API_KEY;
+    } 
+    // Prioridade 2: Build time env vars
+    else {
+        key = process.env.API_KEY;
+    }
+  } catch (e) {
+    console.warn("Erro ao acessar variáveis de ambiente:", e);
+  }
+  return key;
+}
+
 export const analyzeDocumentWithGemini = async (
   text: string
 ): Promise<{ summary: string; overallRisk: RiskLevel; highlights: Highlight[]; sender: string }> => {
   
-  // Safety check for environment variable access to prevent crash in browsers if process is undefined
-  let apiKey: string | undefined;
-  try {
-    apiKey = process.env.API_KEY;
-  } catch (e) {
-    console.error("Environment variable access failed:", e);
-    throw new Error("Erro de Ambiente: 'process.env.API_KEY' não está acessível. Verifique a configuração do build/deploy.");
-  }
+  const apiKey = getApiKey();
 
   if (!apiKey || apiKey === "INSIRA_SUA_NOVA_CHAVE_AQUI") {
     console.error("API Key missing or default");
@@ -143,7 +154,7 @@ export const analyzeDocumentWithGemini = async (
     const errorMsg = error.message || "";
 
     if (errorMsg.includes("leaked") || (errorMsg.includes("403") && errorMsg.includes("key"))) {
-        userMessage = "CHAVE BLOQUEADA: O Google detectou que sua chave vazou e a bloqueou. Gere uma nova chave no AI Studio e atualize o código.";
+        userMessage = "CHAVE BLOQUEADA: A chave atual vazou. Gere uma nova e atualize o index.html.";
     } else if (errorMsg.includes("403")) {
         userMessage = "Erro 403: Acesso Negado. Verifique se a chave de API é válida.";
     } else if (errorMsg.includes("400")) {
@@ -165,12 +176,7 @@ export const getRemediationSuggestion = async (
     riskExplanation: string,
     category: string
 ): Promise<string> => {
-    let apiKey: string | undefined;
-    try {
-        apiKey = process.env.API_KEY;
-    } catch {
-        return "Erro: Variáveis de ambiente inacessíveis.";
-    }
+    const apiKey = getApiKey();
 
     if (!apiKey) return "Erro: Chave de API não configurada.";
 
