@@ -258,7 +258,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ documents, onSelectDocumen
                 </div>
             </div>
             
-            <div className="flex-1 min-h-[250px]">
+            <div className="h-[300px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData} barSize={40}>
                         <XAxis 

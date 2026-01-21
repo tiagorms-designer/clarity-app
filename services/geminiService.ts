@@ -1,8 +1,8 @@
 import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold, Schema } from "@google/genai";
 import { Highlight, RiskLevel } from "../types";
 
-// MUDANÇA CRÍTICA: Usando modelo estável (1.5 Flash) em vez de preview/2.0 para evitar erro 400 e instabilidade
-const GEMINI_MODEL = "gemini-1.5-flash"; 
+// ATUALIZAÇÃO CRÍTICA: Usando modelo Preview mais recente para evitar erro 404 no endpoint v1beta
+const GEMINI_MODEL = "gemini-3-flash-preview"; 
 
 // Helper para obter a chave de API de todas as fontes possíveis
 const getApiKey = (): string | undefined => {
@@ -34,15 +34,21 @@ export const analyzeDocumentWithGemini = async (
   
   const apiKey = getApiKey();
 
+  // Log de Debug (Seguro - mostra apenas os ultimos 4 digitos)
+  if (apiKey) {
+      console.log(`Clarity: API Key detectada (Termina em ...${apiKey.slice(-4)})`);
+  } else {
+      console.error("Clarity: Nenhuma API Key detectada!");
+  }
+
   // Validação explícita da chave
   if (!apiKey || apiKey.trim() === "" || apiKey.includes("INSIRA")) {
-    console.error("API Key missing or invalid");
-    throw new Error("Chave de API não encontrada. Configure a variável VITE_API_KEY ou edite o index.html.");
+    throw new Error("Chave de API ausente. Verifique o arquivo index.html ou as configurações do servidor.");
   }
 
   const ai = new GoogleGenAI({ apiKey: apiKey });
 
-  // Schema simplificado para garantir compatibilidade com 1.5 Flash
+  // Schema simplificado
   const responseSchema: Schema = {
     type: Type.OBJECT,
     properties: {
@@ -114,19 +120,27 @@ export const analyzeDocumentWithGemini = async (
     };
 
   } catch (error: any) {
-    console.error("Gemini Error:", error);
+    console.error("Gemini Full Error:", error);
     
-    const msg = error.message || "";
+    const msg = error.message || JSON.stringify(error);
     
-    if (msg.includes("400") && msg.includes("API key")) {
-        throw new Error("Sua Chave de API expirou ou é inválida. Gere uma nova no Google AI Studio.");
-    } else if (msg.includes("400")) {
-        throw new Error("Erro 400: O documento é complexo demais ou o modelo está instável. Tente novamente.");
-    } else if (msg.includes("429")) {
-        throw new Error("Muitas requisições. Aguarde um minuto.");
+    // Tratamento de erros específicos com mensagens mais claras
+    if (msg.includes("404") || msg.includes("not found")) {
+        // Fallback silencioso ou erro explicativo
+        throw new Error(`Modelo de IA (${GEMINI_MODEL}) não encontrado ou incompatível com a chave. Verifique se sua chave tem acesso ao Gemini 2.0/3.0.`);
+    }
+    if (msg.includes("API key not valid") || msg.includes("API key expired")) {
+        throw new Error("Chave de API inválida ou expirada. Atualize no index.html.");
+    }
+    if (msg.includes("429") || msg.includes("Quota")) {
+        throw new Error("Limite de requisições excedido (Quota 429). Tente novamente em alguns minutos.");
+    }
+    if (msg.includes("503") || msg.includes("overloaded")) {
+        throw new Error("Serviços do Google sobrecarregados. Tente novamente.");
     }
     
-    throw new Error("Erro na análise de IA. Verifique sua conexão e chave de API.");
+    // Retorna a mensagem original para facilitar debug se não cair nos casos acima
+    throw new Error(`Erro na IA: ${msg.substring(0, 100)}...`);
   }
 };
 
