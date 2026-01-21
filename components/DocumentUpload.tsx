@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
-import { Upload, Loader2, AlertCircle, CheckCircle2, Shield } from 'lucide-react';
+import { Upload, Loader2, AlertCircle, CheckCircle2, Shield, FileText, AlertTriangle } from 'lucide-react';
 import { analyzeDocumentWithGemini } from '../services/geminiService';
 import { Document, DocStatus, RiskLevel } from '../types';
 // @ts-ignore
@@ -7,9 +7,9 @@ import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
 import * as mammothLib from 'mammoth';
 
-// Configuração Robusta do PDF.js Worker
-// Força o uso da versão correta do worker compatível com a versão da lib (3.11.174)
-const PDF_WORKER_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+// Força o uso da versão correta do worker via CDN para evitar problemas de build/deploy
+// Usando unpkg que costuma ser mais permissivo com CORS e Headers
+const PDF_WORKER_URL = "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
 
 interface DocumentUploadProps {
   onUploadComplete: (doc: Document) => void;
@@ -26,66 +26,85 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
   const processedFileRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Função robusta para leitura de PDF
+  // Configuração Global do Worker (Executada uma vez)
+  useEffect(() => {
+    try {
+        const pdfjs = (pdfjsLib as any).default || pdfjsLib;
+        if (pdfjs && !pdfjs.GlobalWorkerOptions.workerSrc) {
+            pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
+        }
+    } catch (e) {
+        console.warn("Falha ao configurar PDF Worker globalmente:", e);
+    }
+  }, []);
+
   const readPdfContent = async (file: File): Promise<string> => {
     try {
-        // Tratamento seguro para importação ESM/CommonJS
         const pdfjs = (pdfjsLib as any).default || pdfjsLib;
-
-        // Configura o worker se ainda não estiver configurado
+        
+        // Reforça configuração do worker antes de ler
         if (pdfjs.GlobalWorkerOptions && !pdfjs.GlobalWorkerOptions.workerSrc) {
             pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
         }
 
         const arrayBuffer = await file.arrayBuffer();
         
-        // Carrega o documento usando Uint8Array para compatibilidade
-        const loadingTask = pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) });
+        // Tenta carregar o documento
+        const loadingTask = pdfjs.getDocument({ 
+            data: new Uint8Array(arrayBuffer),
+            cMapUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
+            cMapPacked: true,
+        });
+
         const pdf = await loadingTask.promise;
-        
         let fullText = '';
         
-        // Extrai texto página por página
         for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            
-            // Junta os itens de texto com espaçamento correto
-            const pageText = textContent.items
-                .map((item: any) => item.str)
-                .join(' ');
+            try {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items
+                    .map((item: any) => item.str)
+                    .join(' ');
                 
-            fullText += `--- Página ${i} ---\n${pageText}\n\n`;
+                // Adiciona marcadores de página robustos para o DocumentViewer
+                if (pageText.trim().length > 0) {
+                     fullText += `--- Página ${i} ---\n${pageText}\n\n`;
+                }
+            } catch (pageError) {
+                console.warn(`Erro ao ler página ${i}:`, pageError);
+            }
         }
         
+        if (fullText.trim().length < 50) {
+            throw new Error("O PDF parece ser uma imagem digitalizada (scan) ou está vazio. Esta versão do Clarity processa apenas PDFs com texto selecionável.");
+        }
+
         return fullText;
     } catch (e: any) {
-        console.error("Erro PDF:", e);
+        console.error("Erro Crítico PDF:", e);
         if (e.name === 'PasswordException') throw new Error("O arquivo PDF está protegido por senha.");
-        throw new Error("Não foi possível ler o PDF. O arquivo pode estar corrompido ou o worker falhou.");
+        if (e.message.includes("imagem digitalizada")) throw e;
+        throw new Error("Falha técnica ao ler PDF. Tente converter para Word ou TXT.");
     }
   };
 
-  // Função robusta para leitura de DOCX
   const readDocxContent = async (file: File): Promise<string> => {
     try {
-        // Tratamento seguro para importação do Mammoth
         const mammoth = (mammothLib as any).default || mammothLib;
-        
         const arrayBuffer = await file.arrayBuffer();
         const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
         
-        if (!result.value) {
-            throw new Error("O documento Word parece estar vazio (sem texto identificável).");
+        if (!result.value || result.value.trim().length === 0) {
+            throw new Error("O documento Word parece estar vazio.");
         }
         return result.value;
     } catch (e: any) {
         console.error("Erro DOCX:", e);
-        throw new Error("Não foi possível ler o arquivo Word. " + (e.message || ""));
+        throw new Error("Não foi possível ler o arquivo Word. Verifique se não está corrompido.");
     }
   };
 
-  // Função principal de roteamento de leitura
   const readFileContent = async (file: File): Promise<string> => {
     const fileType = file.type;
     const fileName = file.name.toLowerCase();
@@ -98,18 +117,17 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
     ) {
         return readDocxContent(file);
     } else {
-        // Fallback para arquivos de texto plano (txt, md, json, etc)
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = (event) => {
                 const result = event.target?.result;
-                if (typeof result === 'string') {
+                if (typeof result === 'string' && result.trim().length > 0) {
                     resolve(result);
                 } else {
-                    reject(new Error("Falha ao decodificar arquivo de texto."));
+                    reject(new Error("Arquivo de texto vazio ou formato inválido."));
                 }
             };
-            reader.onerror = () => reject(new Error("Erro de leitura do sistema de arquivos."));
+            reader.onerror = () => reject(new Error("Erro de leitura do sistema."));
             reader.readAsText(file);
         });
     }
@@ -119,29 +137,31 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
     setIsProcessing(true);
     setProgressStep(1);
     setErrorMessage(null);
-    setStatusMessage(`Lendo conteúdo de ${file.name}...`);
+    setStatusMessage(`Lendo ${file.name}...`);
 
     try {
-      const fileContent = await readFileContent(file);
+      // 1. Leitura
+      const rawText = await readFileContent(file);
 
-      if (!fileContent || fileContent.trim().length === 0) {
-        throw new Error("O arquivo está vazio ou o texto não pôde ser extraído.");
+      // 2. Sanitização
+      // Remove caracteres nulos e excesso de espaços que podem quebrar o JSON da IA
+      const cleanText = rawText.replace(/\0/g, '').replace(/\s\s+/g, ' ').slice(0, 80000); // Aumentei limite seguro
+
+      if (cleanText.length < 50) {
+          throw new Error("Conteúdo insuficiente para análise. O documento precisa ter texto legível.");
       }
 
-      // Limita tamanho para evitar erro de cota ou payload muito grande (aprox 60k caracteres)
-      const sanitizedContent = fileContent.slice(0, 60000); 
-
       setProgressStep(2);
-      setStatusMessage('A IA Clarity está analisando riscos e conformidade...');
+      setStatusMessage('Enviando para Inteligência Artificial...');
       
-      const analysis = await analyzeDocumentWithGemini(sanitizedContent);
+      // 3. Análise
+      const analysis = await analyzeDocumentWithGemini(cleanText);
 
       setProgressStep(3);
-      setStatusMessage('Processamento concluído!');
+      setStatusMessage('Finalizando processamento...');
       
       const fileUrl = URL.createObjectURL(file);
 
-      // Determina status inicial baseado no risco
       const initialStatus = (analysis.overallRisk === RiskLevel.HIGH || analysis.overallRisk === RiskLevel.MEDIUM)
          ? DocStatus.INBOX
          : DocStatus.COMPLIANT;
@@ -152,7 +172,7 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
         sender: analysis.sender || 'Upload Externo',
         receivedAt: new Date().toISOString(),
         status: initialStatus,
-        content: fileContent, // Guarda conteúdo completo para visualização
+        content: rawText, // Mantém formatação original para visualização
         fileUrl: fileUrl,
         fileType: file.type,
         overallRisk: analysis.overallRisk,
@@ -168,9 +188,9 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
       }, 800);
 
     } catch (error: any) {
-      console.error(error);
-      setErrorMessage(error.message || 'Erro ao processar documento.');
-      setStatusMessage('Falha na análise.');
+      console.error("Fluxo de Processamento Falhou:", error);
+      setErrorMessage(error.message || 'Erro desconhecido ao processar documento.');
+      setStatusMessage('Processamento interrompido.');
       setIsProcessing(false);
       setProgressStep(0);
     }
@@ -269,7 +289,7 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
                         </div>
                     </div>
                     <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider text-secondary mt-3 px-1">
-                        <span>Leitura</span>
+                        <span>Extração</span>
                         <span>Análise IA</span>
                         <span>Conclusão</span>
                     </div>
@@ -292,25 +312,25 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
                     </button>
 
                     <div className="flex flex-wrap justify-center gap-3">
-                        <FileTypeBadge label="Adobe PDF" ext="PDF" />
-                        <FileTypeBadge label="Microsoft Word" ext="DOCX" />
-                        <FileTypeBadge label="Arquivos de Texto" ext="TXT" />
+                        <FileTypeBadge label="PDF Texto" ext="PDF" />
+                        <FileTypeBadge label="Word" ext="DOCX" />
+                        <FileTypeBadge label="Texto" ext="TXT" />
                     </div>
                 </div>
             )}
         </div>
 
         {errorMessage && (
-            <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-4 text-red-700 animate-in slide-in-from-bottom-2">
+            <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-4 text-red-700 animate-in slide-in-from-bottom-2 shadow-sm">
                 <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center shrink-0">
-                    <AlertCircle className="w-5 h-5 text-red-600" />
+                    <AlertTriangle className="w-5 h-5 text-red-600" />
                 </div>
                 <div className="flex-1">
                     <p className="font-bold text-sm">Não foi possível processar</p>
-                    <p className="text-xs opacity-90">{errorMessage}</p>
+                    <p className="text-xs opacity-90 leading-snug">{errorMessage}</p>
                 </div>
                 <button 
-                    onClick={() => setErrorMessage(null)}
+                    onClick={() => { setErrorMessage(null); setIsProcessing(false); setProgressStep(0); }}
                     className="text-xs font-bold underline hover:text-red-900"
                 >
                     Tentar Novamente
