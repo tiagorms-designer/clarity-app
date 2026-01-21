@@ -161,18 +161,15 @@ export const getRemediationSuggestion = async (
                 role: 'user',
                 parts: [{ text: `Atue como um Consultor Sênior de Riscos e Operações.
                 
-                Crie um Plano de Ação Estruturado para o seguinte apontamento:
+                Escreva um plano de ação DETALHADO (aproximadamente 800 caracteres) em formato de texto corrido para o seguinte apontamento.
                 
                 Risco Identificado: "${riskExplanation}"
                 Trecho do Documento: "${riskSnippet}"
                 Categoria: ${category}
                 
-                A saída deve ser formatada para leitura rápida (bullet points) contendo estritamente:
-                1. Justificativa Técnica (Contextualize por que este risco deve ser mitigado).
-                2. Plano de Ação (Lista prática e sequencial do que o responsável deve fazer).
-                3. Resultado Esperado (O que garante a conformidade).
-                
-                Use tom profissional, imperativo e direto.` }]
+                Desenvolva uma resposta técnica, fluida e direta.
+                Contextualize brevemente a gravidade e descreva os procedimentos operacionais e validações necessárias.
+                O texto deve ser coeso, persuasivo e profissional, sem utilizar listas ou tópicos. Mantenha o foco na clareza e no limite de extensão solicitado.` }]
             }]
         });
         return response.text || "Sem sugestão.";
