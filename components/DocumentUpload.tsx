@@ -1,20 +1,15 @@
-
 import React, { useCallback, useState, useEffect, useRef } from 'react';
-import { Upload, File, Loader2, FileText, AlertCircle, CheckCircle2, FileType, Shield } from 'lucide-react';
+import { Upload, Loader2, AlertCircle, CheckCircle2, Shield } from 'lucide-react';
 import { analyzeDocumentWithGemini } from '../services/geminiService';
 import { Document, DocStatus, RiskLevel } from '../types';
 // @ts-ignore
 import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
-import mammoth from 'mammoth';
+import * as mammothLib from 'mammoth';
 
-// Resolve PDF.js library instance handling ESM/CommonJS interop quirks
-const pdfjs = (pdfjsLib as any).default || pdfjsLib;
-
-// Configure worker
-if (pdfjs?.GlobalWorkerOptions) {
-    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
-}
+// Configuração Robusta do PDF.js Worker
+// Força o uso da versão correta do worker compatível com a versão da lib (3.11.174)
+const PDF_WORKER_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
 interface DocumentUploadProps {
   onUploadComplete: (doc: Document) => void;
@@ -31,41 +26,66 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
   const processedFileRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Função robusta para leitura de PDF
   const readPdfContent = async (file: File): Promise<string> => {
     try {
-        if (!pdfjs || !pdfjs.getDocument) {
-            throw new Error("Biblioteca PDF.js não foi carregada corretamente.");
+        // Tratamento seguro para importação ESM/CommonJS
+        const pdfjs = (pdfjsLib as any).default || pdfjsLib;
+
+        // Configura o worker se ainda não estiver configurado
+        if (pdfjs.GlobalWorkerOptions && !pdfjs.GlobalWorkerOptions.workerSrc) {
+            pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
         }
+
         const arrayBuffer = await file.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
-        const loadingTask = pdfjs.getDocument({ data: uint8Array });
+        
+        // Carrega o documento usando Uint8Array para compatibilidade
+        const loadingTask = pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) });
         const pdf = await loadingTask.promise;
+        
         let fullText = '';
+        
+        // Extrai texto página por página
         for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
-            const pageText = textContent.items.map((item: any) => {
-                return item.str + (item.hasEOL ? '\n' : ' ');
-            }).join('');
-            fullText += pageText + '\n\n';
+            
+            // Junta os itens de texto com espaçamento correto
+            const pageText = textContent.items
+                .map((item: any) => item.str)
+                .join(' ');
+                
+            fullText += `--- Página ${i} ---\n${pageText}\n\n`;
         }
+        
         return fullText;
     } catch (e: any) {
+        console.error("Erro PDF:", e);
         if (e.name === 'PasswordException') throw new Error("O arquivo PDF está protegido por senha.");
-        throw new Error("Não foi possível ler o arquivo PDF. " + (e.message || ""));
+        throw new Error("Não foi possível ler o PDF. O arquivo pode estar corrompido ou o worker falhou.");
     }
   };
 
+  // Função robusta para leitura de DOCX
   const readDocxContent = async (file: File): Promise<string> => {
     try {
+        // Tratamento seguro para importação do Mammoth
+        const mammoth = (mammothLib as any).default || mammothLib;
+        
         const arrayBuffer = await file.arrayBuffer();
-        const result = await mammoth.extractRawText({ arrayBuffer });
+        const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+        
+        if (!result.value) {
+            throw new Error("O documento Word parece estar vazio (sem texto identificável).");
+        }
         return result.value;
     } catch (e: any) {
+        console.error("Erro DOCX:", e);
         throw new Error("Não foi possível ler o arquivo Word. " + (e.message || ""));
     }
   };
 
+  // Função principal de roteamento de leitura
   const readFileContent = async (file: File): Promise<string> => {
     const fileType = file.type;
     const fileName = file.name.toLowerCase();
@@ -77,13 +97,22 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
         fileName.endsWith('.docx')
     ) {
         return readDocxContent(file);
+    } else {
+        // Fallback para arquivos de texto plano (txt, md, json, etc)
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const result = event.target?.result;
+                if (typeof result === 'string') {
+                    resolve(result);
+                } else {
+                    reject(new Error("Falha ao decodificar arquivo de texto."));
+                }
+            };
+            reader.onerror = () => reject(new Error("Erro de leitura do sistema de arquivos."));
+            reader.readAsText(file);
+        });
     }
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (event) => event.target?.result ? resolve(event.target.result as string) : reject(new Error("Falha ao ler arquivo"));
-      reader.onerror = () => reject(new Error("Erro de leitura"));
-      reader.readAsText(file);
-    });
   };
 
   const processFile = async (file: File) => {
@@ -96,20 +125,23 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
       const fileContent = await readFileContent(file);
 
       if (!fileContent || fileContent.trim().length === 0) {
-        throw new Error("O arquivo parece estar vazio ou não contém texto extraível.");
+        throw new Error("O arquivo está vazio ou o texto não pôde ser extraído.");
       }
+
+      // Limita tamanho para evitar erro de cota ou payload muito grande (aprox 60k caracteres)
+      const sanitizedContent = fileContent.slice(0, 60000); 
 
       setProgressStep(2);
       setStatusMessage('A IA Clarity está analisando riscos e conformidade...');
-      const analysis = await analyzeDocumentWithGemini(fileContent);
+      
+      const analysis = await analyzeDocumentWithGemini(sanitizedContent);
 
       setProgressStep(3);
       setStatusMessage('Processamento concluído!');
       
-      // Create Object URL for original view
       const fileUrl = URL.createObjectURL(file);
 
-      // --- LOGIC UPDATE: DETERMINE STATUS BASED ON RISK ---
+      // Determina status inicial baseado no risco
       const initialStatus = (analysis.overallRisk === RiskLevel.HIGH || analysis.overallRisk === RiskLevel.MEDIUM)
          ? DocStatus.INBOX
          : DocStatus.COMPLIANT;
@@ -120,8 +152,8 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
         sender: analysis.sender || 'Upload Externo',
         receivedAt: new Date().toISOString(),
         status: initialStatus,
-        content: fileContent,
-        fileUrl: fileUrl, // Save the blob URL
+        content: fileContent, // Guarda conteúdo completo para visualização
+        fileUrl: fileUrl,
         fileType: file.type,
         overallRisk: analysis.overallRisk,
         summary: analysis.summary,
@@ -147,7 +179,7 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
+    const files = e.dataTransfer.files;
     if (files.length > 0) processFile(files[0]);
   }, []);
 
@@ -164,7 +196,6 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
     }
   }, [initialFile]);
 
-  // Icons component
   const FileTypeBadge = ({ label, ext }: { label: string, ext: string }) => (
     <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-100 text-xs font-medium text-secondary">
         <span className="bg-white border border-gray-200 px-1.5 rounded text-[10px] uppercase font-bold tracking-wider">{ext}</span>
@@ -222,11 +253,11 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete
                     </div>
 
                     <div className="relative w-full">
-                        {/* Connecting Line (Placed behind with z-0) */}
+                        {/* Connecting Line */}
                         <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-100 -translate-y-1/2 rounded-full z-0"></div>
                         <div className="absolute top-1/2 left-0 h-1 bg-primary transition-all duration-700 -translate-y-1/2 rounded-full z-0" style={{ width: `${(progressStep / 3) * 100}%` }}></div>
 
-                        {/* Steps (Placed on top with z-10) */}
+                        {/* Steps */}
                         <div className="flex justify-between items-center relative z-10">
                             {[1, 2, 3].map((step) => (
                                 <div key={step} className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-500 ${
